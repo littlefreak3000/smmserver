@@ -1,6 +1,8 @@
 package nex
 
 import (
+	"github.com/PretendoNetwork/nex-go/v2"
+	common_globals "github.com/PretendoNetwork/nex-protocols-common-go/v2/globals"
 	"os"
 	"strconv"
 
@@ -28,6 +30,9 @@ func registerCommonAuthenticationServerProtocols() {
 	secureStationURL.SetStreamType(constants.StreamTypeRVSecure)
 	secureStationURL.SetType(uint8(constants.StationURLFlagPublic))
 
+	commonTicketGrantingProtocol.ValidateLoginData = func(pid types.PID, loginData types.DataHolder) *nex.Error {
+		return common_globals.ValidatePretendoLoginData(pid, loginData, globals.NEXTokenAESKey)
+	}
 	commonTicketGrantingProtocol.SecureStationURL = secureStationURL
 	commonTicketGrantingProtocol.BuildName = types.NewString(serverBuildString)
 	commonTicketGrantingProtocol.SecureServerAccount = globals.SecureServerAccount

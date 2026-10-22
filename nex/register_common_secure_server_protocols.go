@@ -17,6 +17,8 @@ func registerCommonSecureProtocols() {
 	secureProtocol := secure.NewProtocol()
 	globals.SecureEndpoint.RegisterServiceProtocol(secureProtocol)
 	commonSecureProtocol := securecommon.NewCommonProtocol(secureProtocol)
+	// Register (not RegisterEx) is what the retail client sends.
+	commonSecureProtocol.EnableInsecureRegister()
 	commonSecureProtocol.CreateReportDBRecord = func(pid types.PID, reportID types.UInt32, reportData types.QBuffer) error {
 		return nil
 	}
@@ -41,6 +43,10 @@ func registerCommonSecureProtocols() {
 	smmDatastore.GetMetasWithCourseRecord = nex_datastore_super_mario_maker.GetMetasWithCourseRecord
 	smmDatastore.CheckRateCustomRankingCounter = nex_datastore_super_mario_maker.CheckRateCustomRankingCounter
 	smmDatastore.CTRPickUpCourseSearchObject = nex_datastore_super_mario_maker.CTRPickUpCourseSearchObject
+	smmDatastore.LatestCourseSearchObject = nex_datastore_super_mario_maker.LatestCourseSearchObject
+	smmDatastore.GetCustomRanking = nex_datastore_super_mario_maker.GetCustomRanking
+	smmDatastore.BestScoreRateCourseSearchObject = nex_datastore_super_mario_maker.BestScoreRateCourseSearchObject
+	smmDatastore.ScoreRangeCascadedSearchObject = nex_datastore_super_mario_maker.ScoreRangeCascadedSearchObject
 
 	globals.SecureEndpoint.RegisterServiceProtocol(smmDatastore)
 

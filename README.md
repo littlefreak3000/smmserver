@@ -1,4 +1,15 @@
-# Super Mario Maker replacement server
+# Super Mario Maker replacement server (standalone-auth fork)
+
+Fork of [PretendoNetwork/super-mario-maker](https://github.com/PretendoNetwork/super-mario-maker) for setups that do not run the Pretendo account server. Licensed AGPL-3.0, same as upstream. Changes:
+
+- Login tokens are validated locally (`PN_NEX_TOKEN_AES_KEY`) and NEX passwords derived from `PN_NEX_PASSWORD_SECRET`, so no account gRPC service is needed.
+- The legacy `SecureConnection::Register` method is enabled (the retail client sends it).
+- New: `GetCustomRanking` (star rankings of makers and courses, windowed period IDs, with a fallback to the latest period that has data), `LatestCourseSearchObject` (newest courses), `ScoreRangeCascadedSearchObject` and `BestScoreRateCourseSearchObject` (100 Mario / Course World lists; their `extraData` filters are logged but not fully decoded yet, random or star-ranked courses are returned).
+- `RecommendedCourseSearchObject` may return up to 100 courses (100 Mario needs 32+ after filtering).
+- The Dothub HTTP API (`wup-ama.app.nintendo.net`: pickup, cleared_courses, playlist) is not implemented, so `DOTHUB_ENABLED` is 0.
+
+Tested on Cemu with the v272 EUR update only.
+
 Includes both the authentication and secure servers. Works on both WiiU and 3DS
 
 ## DataStore (S3)
@@ -60,8 +71,7 @@ All configuration options are handled via environment variables
 | `PN_SMM_CONFIG_S3_ACCESS_SECRET`    | S3 secret                                      | Yes                                 |
 | `PN_SMM_CONFIG_S3_BUCKET`           | S3 bucket                                      | Yes                                 |
 | `PN_SMM_CONFIG_S3_KEY_BASE`         | S3 Key prefix                                  | Yes                                 |
-| `PN_SMM_GRPC_SERVER_PORT`           | Port for the GRPC server                       | Yes                                 |
+| `PN_SMM_GRPC_SERVER_PORT`           | Port for the GRPC server (leave empty to disable it) | No                          |
+| `PN_NEX_TOKEN_AES_KEY`              | AES-256 key (64 hex chars) used to open login tokens | Yes                           |
+| `PN_NEX_PASSWORD_SECRET`            | HMAC secret (hex, 32+ bytes) used to derive per-PID NEX passwords | Yes              |
 | `PN_SMM_GRPC_API_KEY`               | API key for your GRPC server                   | No (Assumed to be an open gRPC API) |
-| `PN_SMM_ACCOUNT_GRPC_HOST`          | Host name for your account server gRPC service | Yes                                 |
-| `PN_SMM_ACCOUNT_GRPC_PORT`          | Port for your account server gRPC service      | Yes                                 |
-| `PN_SMM_ACCOUNT_GRPC_API_KEY`       | API key for your account server gRPC service   | No (Assumed to be an open gRPC API) |

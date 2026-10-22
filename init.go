@@ -1,13 +1,12 @@
 package main
 
 import (
+	"encoding/hex"
 	"crypto/rand"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	pb "github.com/PretendoNetwork/grpc/go/account"
 	"github.com/PretendoNetwork/plogger-go"
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
@@ -17,9 +16,6 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 )
 
 func init() {
@@ -43,9 +39,6 @@ func init() {
 	secureServerPort := os.Getenv("PN_SMM_SECURE_SERVER_PORT")
 	gRPCServerPort := os.Getenv("PN_SMM_GRPC_SERVER_PORT")
 	gRPCAPIKey := os.Getenv("PN_SMM_GRPC_API_KEY")
-	accountGRPCHost := os.Getenv("PN_SMM_ACCOUNT_GRPC_HOST")
-	accountGRPCPort := os.Getenv("PN_SMM_ACCOUNT_GRPC_PORT")
-	accountGRPCAPIKey := os.Getenv("PN_SMM_ACCOUNT_GRPC_API_KEY")
 
 	if strings.TrimSpace(postgresURI) == "" {
 		globals.Logger.Error("PN_SMM_POSTGRES_URI environment variable not set")
@@ -95,53 +88,32 @@ func init() {
 		os.Exit(0)
 	}
 
-	gRPCPort, err := strconv.Atoi(gRPCServerPort)
-	if err != nil {
-		globals.Logger.Errorf("PN_SMM_GRPC_SERVER_PORT is not a valid port. Expected 0-65535, got %s", gRPCServerPort)
-		os.Exit(0)
-	} else if gRPCPort < 0 || gRPCPort > 65535 {
-		globals.Logger.Errorf("PN_SMM_GRPC_SERVER_PORT is not a valid port. Expected 0-65535, got %s", gRPCServerPort)
-		os.Exit(0)
+	// The course-deletion gRPC server is optional; leave PN_SMM_GRPC_SERVER_PORT empty to disable it.
+	if strings.TrimSpace(gRPCServerPort) != "" {
+		gRPCPort, err := strconv.Atoi(gRPCServerPort)
+		if err != nil || gRPCPort < 1 || gRPCPort > 65535 {
+			globals.Logger.Errorf("PN_SMM_GRPC_SERVER_PORT is not a valid port, got %s", gRPCServerPort)
+			os.Exit(0)
+		}
+		globals.GRPCServerPort = gRPCPort
 	}
-	globals.GRPCServerPort = gRPCPort
 
 	if strings.TrimSpace(gRPCAPIKey) == "" {
 		globals.Logger.Warning("Insecure gRPC server detected. PN_SMM_GRPC_API_KEY environment variable not set")
 	}
 	globals.GRPCAPIKey = gRPCAPIKey
 
-	if strings.TrimSpace(accountGRPCHost) == "" {
-		globals.Logger.Error("PN_SMM_ACCOUNT_GRPC_HOST environment variable not set")
+	globals.NEXTokenAESKey, err = hex.DecodeString(os.Getenv("PN_NEX_TOKEN_AES_KEY"))
+	if err != nil || len(globals.NEXTokenAESKey) != 32 {
+		globals.Logger.Error("PN_NEX_TOKEN_AES_KEY must be a 64-character hex AES-256 key")
 		os.Exit(0)
 	}
 
-	if strings.TrimSpace(accountGRPCPort) == "" {
-		globals.Logger.Error("PN_SMM_ACCOUNT_GRPC_PORT environment variable not set")
+	globals.NEXPasswordSecret, err = hex.DecodeString(os.Getenv("PN_NEX_PASSWORD_SECRET"))
+	if err != nil || len(globals.NEXPasswordSecret) < 32 {
+		globals.Logger.Error("PN_NEX_PASSWORD_SECRET must be at least 32 bytes encoded as hex")
 		os.Exit(0)
 	}
-
-	if port, err := strconv.Atoi(accountGRPCPort); err != nil {
-		globals.Logger.Errorf("PN_SMM_ACCOUNT_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
-		os.Exit(0)
-	} else if port < 0 || port > 65535 {
-		globals.Logger.Errorf("PN_SMM_ACCOUNT_GRPC_PORT is not a valid port. Expected 0-65535, got %s", accountGRPCPort)
-		os.Exit(0)
-	}
-
-	if strings.TrimSpace(accountGRPCAPIKey) == "" {
-		globals.Logger.Warning("Insecure gRPC server detected. PN_SMM_ACCOUNT_GRPC_API_KEY environment variable not set")
-	}
-
-	globals.GRPCAccountClientConnection, err = grpc.NewClient(fmt.Sprintf("%s:%s", accountGRPCHost, accountGRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		globals.Logger.Criticalf("Failed to connect to account gRPC server: %v", err)
-		os.Exit(0)
-	}
-
-	globals.GRPCAccountClient = pb.NewAccountClient(globals.GRPCAccountClientConnection)
-	globals.GRPCAccountCommonMetadata = metadata.Pairs(
-		"X-API-Key", accountGRPCAPIKey,
-	)
 
 	staticCredentials := credentials.NewStaticV4(s3AccessKey, s3AccessSecret, "")
 

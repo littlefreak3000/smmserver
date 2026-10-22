@@ -32,6 +32,10 @@ func StartSecureServer() {
 		fmt.Println("==================")
 	})
 
+	globals.SecureEndpoint.OnError(func(err *nex.Error) {
+		fmt.Printf("[SMM1 secure error] %d %s\n", err.ResultCode, err.Message)
+	})
+
 	// * Register the common handlers first so that they can be overridden if needed
 	registerCommonSecureProtocols()
 	registerNEXProtocols()

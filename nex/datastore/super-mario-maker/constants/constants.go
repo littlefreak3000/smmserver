@@ -135,7 +135,7 @@ const (
 
 	// DOTHUB_ENABLED enables the use of the wup-ama.app.nintendo.net HTTP API (internally called "Dothub").
 	// Any value other than 1 disables the 100 Mario pickup and the cleared_courses endpoints
-	DOTHUB_ENABLED int32 = 1
+	DOTHUB_ENABLED int32 = 0 // * the pickup/cleared_courses HTTP API is not implemented here yet
 
 	// RANKING_TIMEFRAME_DAYS is the length, in days, of the windowed timeframe used by the dynamically generated
 	// custom ranking application IDs (type * 100000000 + YYYYMMDD of the timeframe start). The timeframe start

@@ -37,7 +37,7 @@ func RecommendedCourseSearchObject(err error, packet nex.PacketInterface, callID
 
 	// HACK The database load is exponential here and
 	length := int(param.ResultRange.Length)
-	maxLength := 25
+	maxLength := 100
 	if length < 0 || length > maxLength {
 		globals.Logger.Warningf("Limiting request to %d courses (was %d)", maxLength, length)
 		length = maxLength
@@ -48,6 +48,12 @@ func RecommendedCourseSearchObject(err error, packet nex.PacketInterface, callID
 	if nexError != nil {
 		return nil, nexError
 	}
+
+	ids := make([]uint64, 0, len(pRankingResults))
+	for _, c := range pRankingResults {
+		ids = append(ids, uint64(c.MetaInfo.DataID))
+	}
+	globals.Logger.Infof("Recommended: asked %d (extra=%v), returning %d courses %v", param.ResultRange.Length, extraData, len(ids), ids)
 
 	rmcResponseStream := nex.NewByteStreamOut(globals.SecureServer.LibraryVersions, globals.SecureServer.ByteStreamSettings)
 
