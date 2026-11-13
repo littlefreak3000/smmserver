@@ -327,10 +327,40 @@ func cacheLimitMB() int {
 	return mb
 }
 
+// cacheManifest is the cache.json of the data folder, if there is one (see docs/cache.md).
+var cacheManifest *pool.CacheManifest
+
+func loadCacheManifest() *pool.CacheManifest {
+	m, err := pool.ReadManifest(dataDirPath)
+	if err != nil {
+		globals.Logger.Warningf("Cannot read the cache manifest: %s", err.Error())
+
+		return nil
+	}
+
+	cacheManifest = m
+
+	return m
+}
+
+func cacheLabel(m *pool.CacheManifest) string {
+	if m.Seed != "" {
+		return fmt.Sprintf("%q (fingerprint %s)", m.Seed, m.Fingerprint)
+	}
+
+	return fmt.Sprintf("of random levels (fingerprint %s)", m.Fingerprint)
+}
+
 // startFetching enables on-demand fetching from the public archive: a background pool that keeps every clear-rate
 // band stocked, and a hook that fetches a level when the game asks for an ID the catalog does not have. Needs the
 // catalog open and the built-in S3 (the downloaded files must land in the folder the S3 serves).
 func startFetching() {
+	if m := loadCacheManifest(); m != nil && m.Locked {
+		globals.Logger.Infof("Cache %s: the set of levels is fixed (%d levels), so fetching is off and nothing is added. `smm-server cache unlock` changes that", cacheLabel(m), m.Levels)
+
+		return
+	}
+
 	if getenv("SMM_FETCH", "1") == "0" {
 		globals.Logger.Info("On-demand level fetching is off (SMM_FETCH=0); only levels already in the archive folder are available")
 		return
@@ -549,6 +579,7 @@ Stop it with Ctrl+C (this saves the catalog).
 
 Challenge seeds (everyone gets the same "random" levels): open http://<this PC>:8080/seed
 Account helper:   smm-server account <name | path/to/account.dat>   (the game's player ID must match what this server assigns)
+Level cache:      smm-server cache build --levels N [--seed WORDS] (same seed = same levels everywhere; see docs/cache.md)
 Whole-archive index: smm-server index build --from <levels.jsonl[.gz|.zst]> --out data/index.sqlite, then restart (see README)
 
 Environment variables override settings.env; SMM_DATA_DIR chooses a different data folder.

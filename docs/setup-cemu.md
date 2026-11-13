@@ -82,6 +82,16 @@ What to expect:
 - **Flags are a regional guess.** The archive does not say where a creator lives. The server guesses from the language/region saved with each creator's Mii: Japanese gets Japan, English gets the USA, and so on. An Australian or Irish creator will show another country.
 - There is no public online play and nothing you upload goes anywhere but your own server.
 
+## Same levels on several computers (optional)
+
+For a contest, or friends who want the same levels on different PCs, build a **cache** with a seed (close the server first, and use an empty data folder):
+
+```
+smm-server cache build --seed "spring contest" --levels 400
+```
+
+Everyone who builds that seed gets the same levels, and the server then gives every player the same lists. Compare the fingerprint it prints. One person can also build it once and share it with `smm-server cache export my-cache.zip`; the others run `smm-server cache import my-cache.zip`. See [cache.md](cache.md).
+
 ## When something goes wrong
 
 | What you see | What it means and what to do |

@@ -135,9 +135,46 @@ func startIndexMode(p *pool.Pool, x *index.Index) {
 	globals.Logger.Successf("Whole-archive index: %d levels (fingerprint %s). Lists draw from all of them; levels are downloaded when needed (SMM_POOL_TARGET is not used)", x.Total(), x.Fingerprint())
 }
 
+// applyCacheToSeeds makes the seed page show the cache (its fingerprint is part of the challenge code, so players can see that
+// their copies match) and, when the cache was built with a seed, uses that seed for everybody unless a seed is already set.
+func applyCacheToSeeds(store *challenge.Store) {
+	m := cacheManifest
+	if m == nil || archiveIdx != nil {
+		return
+	}
+
+	fp, n, err := pool.CacheFingerprint(database.DB)
+	if err != nil {
+		globals.Logger.Warningf("Cannot fingerprint the cache: %s", err.Error())
+
+		return
+	}
+
+	seedInfoMu.Lock()
+	seedMode = fmt.Sprintf("a cache of %d levels (fingerprint %s)", n, fp)
+	seedFinger = fp
+	seedInfoMu.Unlock()
+
+	if m.Locked && fp != m.Fingerprint {
+		globals.Logger.Warningf("The levels in this folder (fingerprint %s) are not the cache the manifest describes (%s): players with the original cache will see different levels", fp, m.Fingerprint)
+	}
+
+	if m.PlaySeed != "" && store.Effective("") == "" {
+		if err := store.Set(challenge.Everyone, m.PlaySeed); err != nil {
+			globals.Logger.Warningf("Cannot set the cache's seed %q: %s", m.PlaySeed, err.Error())
+
+			return
+		}
+
+		globals.Logger.Infof("Cache seed %q is active for every player (the /seed page can change it). Challenge code: %s", m.PlaySeed, challenge.Code(m.PlaySeed, fp))
+	}
+}
+
 // startSelection connects the course lists to the index and the challenge seeds. Needs the catalog open; runs after startFetching.
 func startSelection() {
 	store := ensureSeedStore()
+
+	applyCacheToSeeds(store)
 
 	sel := &selection.Selector{
 		DB: database.DB, Index: archiveIdx, Seeds: store, DifficultyApp: 300000000,

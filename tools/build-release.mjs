@@ -104,6 +104,7 @@ export function build(name) {
   fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
   fs.copyFileSync(path.join(root, 'docs', 'setup-cemu.md'), path.join(dir, 'docs', 'setup-cemu.md'));
   fs.copyFileSync(path.join(root, 'docs', 'setup-wiiu.md'), path.join(dir, 'docs', 'setup-wiiu.md'));
+  fs.copyFileSync(path.join(root, 'docs', 'cache.md'), path.join(dir, 'docs', 'cache.md'));
   fs.cpSync(path.join(root, 'docs', 'cemu'), path.join(dir, 'docs', 'cemu'), { recursive: true });
 
   const zip = path.join(dist, `smm-server-${name}.zip`);

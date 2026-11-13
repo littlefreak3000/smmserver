@@ -18,6 +18,7 @@ Guides:
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [How archived levels work](#how-archived-levels-work)
+- [Caches: the same levels on every computer](#caches-the-same-levels-on-every-computer)
 - [The whole archive and challenge seeds](#the-whole-archive-and-challenge-seeds)
 - [Building and tests](#building-and-tests)
 - [Status and known limits](#status-and-known-limits)
@@ -111,6 +112,20 @@ Two behaviours, both on by default:
 **Size limit (optional, off by default).** Growth by timer stops at `SMM_POOL_MAX`, but the levels fetched while playing have no cap, so a heavy player's data folder keeps growing. With `SMM_CACHE_MAX_MB` set (for example `500`), the server checks every five minutes how much the downloaded level files take. Over the limit it removes the oldest levels, by when they were fetched, down to 90% of the limit, together with their ratings, rankings and records. Levels a local account starred or made are never removed, and the game can fetch a removed level again if it asks for it. Values from 1 to 19 are raised to 20 MB, `0` means no limit, and the limit applies while fetching is on. New levels keep arriving, so the pool becomes a rolling window of the most recently fetched levels.
 
 **Politeness.** Requests are paced (API 400 ms apart, Wayback 1 s apart, shared by all callers), `Retry-After` is honoured, and the API's analytics endpoints are never called. Anyone who runs the server contacts those two services from their own IP address. For a bigger pool, prefer asking the API's maintainers for a dump over raising `SMM_POOL_TARGET` a lot.
+
+## Caches: the same levels on every computer
+
+A **cache** is a data folder filled on purpose. `smm-server cache build --seed "spring contest" --levels 400` downloads 400 levels (rounded up to a multiple of 4, filled evenly across the four difficulty groups). With `--seed`, the seed alone decides which levels they are, so everyone who builds the same seed to the same size gets the same levels, and the server then gives all players the same lists. Without a seed the levels are random. A build can be stopped and carried on, and a larger `--levels` with the same seed only adds levels.
+
+```
+smm-server cache build --levels N [--seed WORDS]   # download into the data folder (about 50 KB and 2 s per level)
+smm-server cache info                              # level count, size, fingerprint, seed
+smm-server cache export my-cache.zip               # pack it (without any player's data)
+smm-server cache import my-cache.zip               # unpack it into an empty data folder
+smm-server cache lock | unlock                     # keep the set of levels fixed, or let the server fetch again
+```
+
+The **fingerprint** (eight characters) identifies the exact set of levels; the same fingerprint means the same levels. A seeded cache is locked, so the server fetches nothing and the set stays as built. Anyone with enough disk space can build a large cache (4,000 levels is about 200 MB and 2.5 hours), and one person can build it and share the zip. The literal whole archive (about 10 million levels, around 470 GB) cannot be built this way; see [docs/cache.md](docs/cache.md) for the sizes, sharing, and what can still make two copies differ.
 
 ## The whole archive and challenge seeds
 

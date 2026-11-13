@@ -25,6 +25,10 @@ func init() {
 		os.Exit(runIndexCommand(os.Args[2:]))
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "cache" {
+		os.Exit(runCacheCommand(os.Args[2:]))
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "account" {
 		os.Exit(runAccountCommand(os.Args[2:]))
 	}
