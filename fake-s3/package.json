@@ -1,0 +1,12 @@
+{
+  "name": "smm-fake-s3",
+  "version": "0.1.0",
+  "description": "Minimal fake S3 that serves preserved Super Mario Maker course files to Wii U / 3DS",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs"
+  }
+}

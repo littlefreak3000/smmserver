@@ -1,0 +1,7 @@
+# keep one line-ending style in the repository (LF) whatever the checkout machine uses
+* text=auto
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.bin binary
+*.zip binary

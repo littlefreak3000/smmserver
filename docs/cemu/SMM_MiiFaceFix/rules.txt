@@ -1,0 +1,7 @@
+[Definition]
+titleIds = 000500001018DC00,000500001018DB00,000500001018DD00
+name = Mii face fix
+path = "Super Mario Maker/Workarounds/Mii face fix"
+description = Replaces the Mii library's float byte-swap loop (which Cemu's recompiler gets wrong, leaving Miis without faces) with an integer byte-swap. Same effect as Cemu's built-in FFL hook, which only matches this game from April 2026 on.
+version = 7
+default = true
