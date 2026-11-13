@@ -1,6 +1,6 @@
 # Playing on a modded Wii U with the home server
 
-> **Status: not tested on a console.** The Cemu setup (see [setup-cemu.md](setup-cemu.md)) is verified. This guide is built from how the Pretendo project's own self-hosting guide connects a console, from Inkay's source code, and from what the server does when it is tested against a stand-in client. The first person to try it on a real Wii U will probably hit something small. The guide says where to look when that happens, and the server logs what the console asks for.
+> **Status: not tested on a console.** The Cemu setup (see [setup-cemu.md](setup-cemu.md)) is verified. This guide is built from how the Pretendo project's own self-hosting guide connects a console, from Inkay's source code, and from what the server does when it is tested against a stand-in client. Expect to need small fixes on a first real run. The guide says where to look when something fails, and the server logs what the console asks for.
 
 ## How it works
 
@@ -95,5 +95,5 @@ Run the server with `SMM_TRACE=1` (in `data/settings.env`, or as an environment 
 ## Things to know
 
 - **No passwords, LAN only.** Anyone who can reach the PC can log in as anyone. Do not open its ports on your router.
-- **Why it might not work yet.** The parts that are checked: the proxy (a test client talks to it over HTTPS with an old-console style TLS setup, and over plain HTTP for the connection test and downloads), the account service (same one used by Cemu), and the player-ID helper. The parts that are not checked: what a real console sends and how its secure-connection code reacts. Please report what you find; the log lines above are what is needed.
+- **What is and is not checked.** Checked: the proxy (a test client talks to it over HTTPS with an old-console style TLS setup, and over plain HTTP for the connection test and downloads), the account service (same one used by Cemu), and the player-ID helper. Not checked: what a real console sends and how its secure-connection code reacts. Reports of what happens are welcome; the log lines above are what is needed.
 - Backups, licence and the archive services are the same as in the Cemu guide.
