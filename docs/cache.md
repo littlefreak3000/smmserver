@@ -70,7 +70,7 @@ There is no limit in the program other than disk space and time. Roughly:
 
 The pace is set by politeness towards two volunteer-run services (a metadata API and the Internet Archive), not by your connection, so for a large cache **build it once and share the zip** instead of everyone downloading the same levels.
 
-**The whole archive** (about 10 million levels, around 470 GB) is not something `--levels` can build: at this pace it would take months of constant requests, which the services should not be asked to handle. That needs a list of all levels, which the program can use as an *index*, and ideally a copy of the level files from the people who keep them. [whole-archive-index.md](whole-archive-index.md) describes that plan. Until then the practical route is large seeded caches shared as zips.
+**The whole archive** (about 10 million levels, around 470 GB) is not something `--levels` can build: at this pace it would take months of constant requests, which the services should not be asked to handle. That needs a list of all levels, which the program can use as an *index*, and ideally a copy of the level files from the people who keep them. [whole-archive.md](whole-archive.md) explains the routes (the index, and the Archive Team's files) step by step, and [whole-archive-index.md](whole-archive-index.md) is the design behind the index. Until then the practical route is large seeded caches shared as zips.
 
 ## What can still make two copies differ
 
