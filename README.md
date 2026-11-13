@@ -170,6 +170,13 @@ once with a larger `SMM_POOL_TARGET`; it is the same code path, at the same requ
 levels of a difficulty run low the pool fetches 12 more for the bands of that difficulty in the background. A seeded challenge list
 is not affected. The "played" memory is in RAM (a restart forgets it) and shared by everyone on the server.
 
+**Size limit (optional, off by default).** The timer growth stops at `SMM_POOL_MAX`, but the extra levels fetched while you play have no
+cap, so a heavy player's data folder keeps growing. Set `SMM_CACHE_MAX_MB` (for example `500`) and every five minutes the server
+checks how much the downloaded level files take; over the limit it removes the oldest levels (by when they were fetched) down to
+90% of it, with their ratings, rankings and records. Levels a local account starred or made are never removed, and the game
+can fetch a removed level again if it asks for it. Values from 1 to 19 are raised to 20 MB; `0` (the default) means no limit. It
+works while fetching is on. New levels keep arriving, so the pool becomes a rolling window of the most recently fetched levels.
+
 Politeness: requests are paced (API 400 ms, Wayback 1 s apart, shared by all callers), `Retry-After` is honored, and the metadata
 API's analytics endpoints are never called. Anyone who runs this server contacts those two services from their IP address.
 For a bigger pool prefer asking the maintainers for a dump over raising `SMM_POOL_TARGET` a lot.

@@ -306,6 +306,27 @@ func startConsoleProxy(account http.Handler) {
 	globals.Logger.Infof("Wii U proxy listening on %s (only for a Wii U patched with Inkay; SMM_PROXY_PORT=0 turns it off)", ln.Addr().String())
 }
 
+// cacheLimitMB reads SMM_CACHE_MAX_MB: how many MB the downloaded level files may take before the oldest are removed.
+// 0 (the default) means no limit; a very small number is raised, since the pool keeps about 100 levels in stock.
+func cacheLimitMB() int {
+	raw := getenv("SMM_CACHE_MAX_MB", "0")
+
+	mb, err := strconv.Atoi(raw)
+	if err != nil || mb < 0 {
+		globals.Logger.Warningf("SMM_CACHE_MAX_MB must be a number of megabytes (0 = no limit); ignoring %q", raw)
+
+		return 0
+	}
+
+	if mb > 0 && mb < 20 {
+		globals.Logger.Warningf("SMM_CACHE_MAX_MB=%d is too small to hold the levels the pool keeps in stock; using 20", mb)
+
+		return 20
+	}
+
+	return mb
+}
+
 // startFetching enables on-demand fetching from the public archive: a background pool that keeps every clear-rate
 // band stocked, and a hook that fetches a level when the game asks for an ID the catalog does not have. Needs the
 // catalog open and the built-in S3 (the downloaded files must land in the folder the S3 serves).
@@ -357,6 +378,13 @@ func startFetching() {
 
 	// * archive profiles (the Mii and name the game shows next to a level) for the creators already in the catalog
 	go p.BackfillProfiles(context.Background())
+
+	// * optional size limit for the downloaded levels: the oldest go first (off by default)
+	if mb := cacheLimitMB(); mb > 0 {
+		globals.Logger.Infof("Level files are limited to %d MB: when they take more, the oldest levels are removed (SMM_CACHE_MAX_MB=0 turns this off)", mb)
+
+		go p.KeepWithin(context.Background(), int64(mb)<<20, 5*time.Minute)
+	}
 
 	// * With a whole-archive index every level is a candidate and is downloaded when needed: no background stocking
 	if x := openIndex(); x != nil {
@@ -420,6 +448,9 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
 #SMM_POOL_MAX=250
+# Size limit for the downloaded levels, in megabytes. When they take more, the oldest levels are removed (levels you starred or
+# made are kept; the game can fetch a removed level again). 0 = no limit (the default). Only used while fetching is on.
+#SMM_CACHE_MAX_MB=0
 
 # Whole-archive index: lets every archived level come up in random lists (build one with: smm-server index build --from <levels.jsonl> --out data/index.sqlite).
 # Used automatically when data/index.sqlite exists. 0 = ignore it.
