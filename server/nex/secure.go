@@ -26,10 +26,7 @@ func StartSecureServer() {
 	globals.SecureEndpoint.OnData(func(packet nex.PacketInterface) {
 		request := packet.RMCMessage()
 
-		fmt.Println("=== SMM1 - Secure ===")
-		fmt.Printf("Protocol ID: %d\n", request.ProtocolID)
-		fmt.Printf("Method ID: %d\n", request.MethodID)
-		fmt.Println("==================")
+		globals.Tracef("secure request: protocol %d method %d", request.ProtocolID, request.MethodID)
 	})
 
 	globals.SecureEndpoint.OnError(func(err *nex.Error) {

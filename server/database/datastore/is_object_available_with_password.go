@@ -10,10 +10,14 @@ import (
 )
 
 func IsObjectAvailableWithPassword(dataID, password types.UInt64) *nex.Error {
+	return isObjectAvailableWithPassword(dataID, password, false)
+}
+
+func isObjectAvailableWithPassword(dataID, password types.UInt64, retried bool) *nex.Error {
 	var underReview bool
 	var accessPassword types.UInt64
 
-	err := database.Postgres.QueryRow(`SELECT
+	err := database.DB.QueryRow(`SELECT
 		under_review,
 		access_password
 	FROM datastore.objects WHERE data_id=$1 AND upload_completed=TRUE AND deleted=FALSE`, dataID).Scan(
@@ -23,6 +27,11 @@ func IsObjectAvailableWithPassword(dataID, password types.UInt64) *nex.Error {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
+			// * give on-demand fetching (if enabled) one chance to bring the level into the catalog
+			if !retried && database.OnMissing != nil && database.OnMissing(uint64(dataID)) {
+				return isObjectAvailableWithPassword(dataID, password, true)
+			}
+
 			return nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")
 		}
 

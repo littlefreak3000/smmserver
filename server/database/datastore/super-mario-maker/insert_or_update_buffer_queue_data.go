@@ -16,7 +16,7 @@ func InsertOrUpdateBufferQueueData(dataID types.UInt64, slot types.UInt32, buffe
 		return nexError
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// * Real server does not allow duplicate
 	// * buffers to be in a given objects slot,
@@ -25,7 +25,7 @@ func InsertOrUpdateBufferQueueData(dataID types.UInt64, slot types.UInt32, buffe
 	// * the older buffer and adds the newer one.
 	// * Instead of that, we just update the
 	// * creation time
-	_, err := database.Postgres.Exec(`INSERT INTO datastore.buffer_queues (
+	_, err := database.DB.Exec(`INSERT INTO datastore.buffer_queues (
 		data_id,
 		slot,
 		creation_date,

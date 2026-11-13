@@ -8,7 +8,6 @@ import (
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func InitializeObjectByPreparePostParam(ownerPID types.PID, param datastore_types.DataStorePreparePostParam) (uint64, *nex.Error) {
@@ -24,8 +23,8 @@ func InitializeObjectByPreparePostParam(ownerPID types.PID, param datastore_type
 		extraDataArray = append(extraDataArray, string(param.ExtraData[i]))
 	}
 
-	now := time.Now()
-	err := database.Postgres.QueryRow(`INSERT INTO datastore.objects (
+	now := time.Now().UTC()
+	err := database.DB.QueryRow(`INSERT INTO datastore.objects (
 		owner,
 		size,
 		name,
@@ -68,15 +67,15 @@ func InitializeObjectByPreparePostParam(ownerPID types.PID, param datastore_type
 		param.DataType,
 		param.MetaBinary,
 		param.Permission.Permission,
-		pq.Array(param.Permission.RecipientIDs),
+		database.Array(param.Permission.RecipientIDs),
 		param.DelPermission.Permission,
-		pq.Array(param.DelPermission.RecipientIDs),
+		database.Array(param.DelPermission.RecipientIDs),
 		param.Flag,
 		param.Period,
 		param.ReferDataID,
-		pq.Array(tagArray),
+		database.Array(tagArray),
 		param.PersistenceInitParam.PersistenceSlotID, // TODO - Check param.PersistenceInitParam.DeleteLastObject?
-		pq.Array(extraDataArray),
+		database.Array(extraDataArray),
 		now,
 		now,
 	).Scan(&dataID)

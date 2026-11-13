@@ -12,7 +12,7 @@ import (
 func UpdateObjectUploadCompletedByDataID(dataID types.UInt64, uploadCompleted bool) *nex.Error {
 	var underReview bool
 
-	err := database.Postgres.QueryRow(`SELECT update_password FROM datastore.objects WHERE data_id=$1 AND deleted=FALSE`, dataID).Scan(&underReview)
+	err := database.DB.QueryRow(`SELECT update_password FROM datastore.objects WHERE data_id=$1 AND deleted=FALSE`, dataID).Scan(&underReview)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")
@@ -28,7 +28,7 @@ func UpdateObjectUploadCompletedByDataID(dataID types.UInt64, uploadCompleted bo
 		return nex.NewError(nex.ResultCodes.DataStore.UnderReviewing, "This object is under review")
 	}
 
-	_, err = database.Postgres.Exec(`UPDATE datastore.objects SET upload_completed=$1 WHERE data_id=$2`, uploadCompleted, dataID)
+	_, err = database.DB.Exec(`UPDATE datastore.objects SET upload_completed=$1 WHERE data_id=$2`, uploadCompleted, dataID)
 	if err != nil {
 		globals.Logger.Error(err.Error())
 		// TODO - Send more specific errors?

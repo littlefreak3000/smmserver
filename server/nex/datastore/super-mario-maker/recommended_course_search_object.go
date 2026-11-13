@@ -4,9 +4,11 @@ import (
 	"github.com/PretendoNetwork/nex-go/v2"
 	"github.com/PretendoNetwork/nex-go/v2/types"
 	datastore_super_mario_maker "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/super-mario-maker"
+	datastore_super_mario_maker_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/super-mario-maker/types"
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	datastore_smm_db "github.com/PretendoNetwork/super-mario-maker/database/datastore/super-mario-maker"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
+	"github.com/PretendoNetwork/super-mario-maker/selection"
 )
 
 func RecommendedCourseSearchObject(err error, packet nex.PacketInterface, callID uint32, param datastore_types.DataStoreSearchParam, extraData types.List[types.String]) (*nex.RMCMessage, *nex.Error) {
@@ -43,17 +45,39 @@ func RecommendedCourseSearchObject(err error, packet nex.PacketInterface, callID
 		length = maxLength
 	}
 
+	// * With the whole-archive index and/or a challenge seed the Selector picks the levels, honoring the difficulty
+	// * filter (failure-rate range, see recommendedRange). Otherwise: the original random query.
 	// TODO - Use the offet? Real client never uses it, but might be nice for completeness sake?
-	pRankingResults, nexError := datastore_smm_db.GetRandomCoursesWithLimit(length)
-	if nexError != nil {
-		return nil, nexError
+	var pRankingResults types.List[datastore_super_mario_maker_types.DataStoreCustomRankingResult]
+
+	if Selector != nil {
+		minClear, maxClear := recommendedRange(extraData)
+
+		var chosen bool
+
+		pRankingResults, chosen = selectedList(selection.Query{
+			Kind: selection.Random, App: Selector.DifficultyApp, Min: minClear, Max: maxClear, Length: length, NNID: requester(packet),
+		}, 0, 0)
+
+		if !chosen {
+			pRankingResults = nil
+		}
+	}
+
+	if pRankingResults == nil {
+		var nexError *nex.Error
+
+		pRankingResults, nexError = datastore_smm_db.GetRandomCoursesWithLimit(length)
+		if nexError != nil {
+			return nil, nexError
+		}
 	}
 
 	ids := make([]uint64, 0, len(pRankingResults))
 	for _, c := range pRankingResults {
 		ids = append(ids, uint64(c.MetaInfo.DataID))
 	}
-	globals.Logger.Infof("Recommended: asked %d (extra=%v), returning %d courses %v", param.ResultRange.Length, extraData, len(ids), ids)
+	globals.Tracef("Recommended: asked %d (extra=%v), returning %d courses %v", param.ResultRange.Length, extraData, len(ids), ids)
 
 	rmcResponseStream := nex.NewByteStreamOut(globals.SecureServer.LibraryVersions, globals.SecureServer.ByteStreamSettings)
 

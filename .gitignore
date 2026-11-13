@@ -23,3 +23,8 @@ __pycache__/
 # the one-level sample archive and the old stand-in's sample data (a downloaded level file; not ours to publish)
 /archive/
 /fake-s3/data/
+
+# sample level files used by some tests (see server/*/testdata/README.md): kept on disk, never committed
+/server/**/testdata/*.bin
+/server/**/testdata/*.cdt
+/server/**/testdata/*.meta

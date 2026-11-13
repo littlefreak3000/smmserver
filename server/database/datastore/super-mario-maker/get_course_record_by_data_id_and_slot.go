@@ -24,7 +24,7 @@ func GetCourseRecordByDataIDAndSlot(dataID types.UInt64, slot types.UInt8) (data
 	var createdDate time.Time
 	var updatedDate time.Time
 
-	err := database.Postgres.QueryRow(`SELECT
+	err := database.DB.QueryRow(`SELECT
 		first_pid,
 		best_pid,
 		best_score,

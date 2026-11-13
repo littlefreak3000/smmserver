@@ -12,7 +12,7 @@ import (
 func GetObjectSizeByDataID(dataID types.UInt64) (uint32, *nex.Error) {
 	var size uint32
 
-	err := database.Postgres.QueryRow(`SELECT size FROM datastore.objects WHERE data_id=$1`, dataID).Scan(&size)
+	err := database.DB.QueryRow(`SELECT size FROM datastore.objects WHERE data_id=$1`, dataID).Scan(&size)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")

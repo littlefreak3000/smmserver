@@ -19,6 +19,7 @@ func GetCustomRankingByDataID(err error, packet nex.PacketInterface, callID uint
 	pRankingResult := datastore_smm_db.GetCustomRankingsByDataIDs(param.ApplicationID, param.DataIDList)
 	pResults := make(types.List[types.QResult], 0, len(param.DataIDList))
 
+
 	for i := range pRankingResult {
 		// * This is kind of backwards.
 		// * The database pulls this data

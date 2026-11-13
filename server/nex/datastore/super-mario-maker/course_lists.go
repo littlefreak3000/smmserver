@@ -10,6 +10,7 @@ import (
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	datastore_smm_db "github.com/PretendoNetwork/super-mario-maker/database/datastore/super-mario-maker"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
+	"github.com/PretendoNetwork/super-mario-maker/selection"
 )
 
 // maxListLength caps one page; the client asks for 25-ish at a time.
@@ -42,9 +43,14 @@ func LatestCourseSearchObject(err error, packet nex.PacketInterface, callID uint
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
-	globals.Logger.Infof("LatestCourseSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
+	globals.Tracef("LatestCourseSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
 
 	offset, length := clampRange(uint32(param.ResultRange.Offset), uint32(param.ResultRange.Length))
+
+	if list, ok := selectedList(selection.Query{Kind: selection.Latest, Offset: offset, Length: length, NNID: requester(packet)}, 0, offset+1); ok {
+		return writeCourseList(callID, datastore_super_mario_maker.MethodLatestCourseSearchObject, list), nil
+	}
+
 	list, nexError := datastore_smm_db.GetCourses(0, true, offset, length)
 	if nexError != nil {
 		return nil, nexError
@@ -60,13 +66,26 @@ func GetCustomRanking(err error, packet nex.PacketInterface, callID uint32, para
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
-	globals.Logger.Infof("GetCustomRanking app=%d range=%d+%d option=%#x", param.ApplicationID, param.ResultRange.Offset, param.ResultRange.Length, param.ResultOption)
+	globals.Tracef("GetCustomRanking app=%d range=%d+%d option=%#x", param.ApplicationID, param.ResultRange.Offset, param.ResultRange.Length, param.ResultOption)
 
 	offset, length := clampRange(uint32(param.ResultRange.Offset), uint32(param.ResultRange.Length))
 	appID := uint32(param.ApplicationID)
-	list, nexError := datastore_smm_db.GetCourses(appID, false, offset, length)
-	if nexError != nil {
-		return nil, nexError
+
+	var (
+		list      types.List[datastore_super_mario_maker_types.DataStoreCustomRankingResult]
+		nexError  *nex.Error
+		fromIndex bool
+	)
+
+	if appID == 0 { // the whole-archive index knows the star ranking
+		list, fromIndex = selectedList(selection.Query{Kind: selection.Stars, Offset: offset, Length: length, NNID: requester(packet)}, 0, offset+1)
+	}
+
+	if !fromIndex {
+		list, nexError = datastore_smm_db.GetCourses(appID, false, offset, length)
+		if nexError != nil {
+			return nil, nexError
+		}
 	}
 
 	// * Windowed rankings (one application ID per period) are empty until somebody stars a course
@@ -74,7 +93,7 @@ func GetCustomRanking(err error, packet nex.PacketInterface, callID uint32, para
 	// * latest earlier period of the same ranking that has data.
 	if len(list) == 0 && appID >= 100000000 {
 		if prev, ok := datastore_smm_db.PreviousRankingPeriod(appID); ok {
-			globals.Logger.Infof("GetCustomRanking app=%d empty, falling back to %d", appID, prev)
+			globals.Tracef("GetCustomRanking app=%d empty, falling back to %d", appID, prev)
 			list, nexError = datastore_smm_db.GetCourses(prev, false, offset, length)
 			if nexError != nil {
 				return nil, nexError
@@ -128,7 +147,7 @@ func ScoreRangeCascadedSearchObject(err error, packet nex.PacketInterface, callI
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
-	globals.Logger.Infof("ScoreRangeCascadedSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
+	globals.Tracef("ScoreRangeCascadedSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
 
 	_, length := clampRange(0, uint32(param.ResultRange.Length))
 
@@ -138,10 +157,20 @@ func ScoreRangeCascadedSearchObject(err error, packet nex.PacketInterface, callI
 		minScore, errMin := strconv.ParseInt(string(extraData[1]), 10, 64)
 		maxScore, errMax := strconv.ParseInt(string(extraData[2]), 10, 64)
 		if errApp == nil && errMin == nil && errMax == nil {
-			var nexError *nex.Error
-			list, nexError = datastore_smm_db.GetRandomCoursesInScoreRange(uint32(app), minScore, maxScore, length)
-			if nexError != nil {
-				return nil, nexError
+			// * with the whole-archive index and/or a challenge seed, the Selector decides (and everyone with the same seed
+			// * gets the same levels); otherwise a plain random query over the catalog
+			var chosen bool
+
+			list, chosen = selectedList(selection.Query{
+				Kind: selection.Random, App: uint32(app), Min: minScore, Max: maxScore, Length: length, NNID: requester(packet),
+			}, uint32(app), 0)
+
+			if !chosen {
+				var nexError *nex.Error
+				list, nexError = datastore_smm_db.GetRandomCoursesInScoreRange(uint32(app), minScore, maxScore, length)
+				if nexError != nil {
+					return nil, nexError
+				}
 			}
 		}
 	}
@@ -165,7 +194,7 @@ func BestScoreRateCourseSearchObject(err error, packet nex.PacketInterface, call
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
-	globals.Logger.Infof("BestScoreRateCourseSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
+	globals.Tracef("BestScoreRateCourseSearchObject range=%d+%d extra=%v", param.ResultRange.Offset, param.ResultRange.Length, extraData)
 
 	offset, length := clampRange(uint32(param.ResultRange.Offset), uint32(param.ResultRange.Length))
 	list, nexError := datastore_smm_db.GetCourses(0, false, offset, length)

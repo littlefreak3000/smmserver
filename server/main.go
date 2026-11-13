@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"time"
 
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	"github.com/PretendoNetwork/super-mario-maker/grpc"
@@ -18,6 +19,11 @@ func main() {
 	}
 	go nex.StartAuthenticationServer()
 	go nex.StartSecureServer()
+
+	installShutdownHandler()
+
+	time.Sleep(time.Second) // let the servers log their start-up lines first
+	printBanner()
 
 	wg.Wait()
 }

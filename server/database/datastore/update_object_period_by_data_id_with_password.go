@@ -13,7 +13,7 @@ func UpdateObjectPeriodByDataIDWithPassword(dataID types.UInt64, period types.UI
 	var updatePassword types.UInt64
 	var underReview bool
 
-	err := database.Postgres.QueryRow(`SELECT update_password, under_review FROM datastore.objects WHERE data_id=$1 AND upload_completed=TRUE AND deleted=FALSE`, dataID).Scan(
+	err := database.DB.QueryRow(`SELECT update_password, under_review FROM datastore.objects WHERE data_id=$1 AND upload_completed=TRUE AND deleted=FALSE`, dataID).Scan(
 		&updatePassword,
 		&underReview,
 	)
@@ -37,7 +37,7 @@ func UpdateObjectPeriodByDataIDWithPassword(dataID types.UInt64, period types.UI
 		return nex.NewError(nex.ResultCodes.DataStore.UnderReviewing, "This object is under review")
 	}
 
-	_, err = database.Postgres.Exec(`UPDATE datastore.objects SET period=$1 WHERE data_id=$2`, period, dataID)
+	_, err = database.DB.Exec(`UPDATE datastore.objects SET period=$1 WHERE data_id=$2`, period, dataID)
 	if err != nil {
 		globals.Logger.Error(err.Error())
 		// TODO - Send more specific errors?

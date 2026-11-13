@@ -8,11 +8,10 @@ import (
 	datastore_smm_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/super-mario-maker/types"
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func InitializeObjectByAttachFileParam(ownerPID types.PID, param datastore_smm_types.DataStoreAttachFileParam) (types.UInt64, *nex.Error) {
-	now := time.Now()
+	now := time.Now().UTC()
 
 	var dataID types.UInt64
 	tagArray := make([]string, 0, len(param.PostParam.Tags))
@@ -25,7 +24,7 @@ func InitializeObjectByAttachFileParam(ownerPID types.PID, param datastore_smm_t
 		extraDataArray = append(extraDataArray, string(param.PostParam.ExtraData[i]))
 	}
 
-	err := database.Postgres.QueryRow(`INSERT INTO datastore.objects (
+	err := database.DB.QueryRow(`INSERT INTO datastore.objects (
 		owner,
 		size,
 		name,
@@ -68,15 +67,15 @@ func InitializeObjectByAttachFileParam(ownerPID types.PID, param datastore_smm_t
 		param.PostParam.DataType,
 		param.PostParam.MetaBinary,
 		param.PostParam.Permission.Permission,
-		pq.Array(param.PostParam.Permission.RecipientIDs),
+		database.Array(param.PostParam.Permission.RecipientIDs),
 		param.PostParam.DelPermission.Permission,
-		pq.Array(param.PostParam.DelPermission.RecipientIDs),
+		database.Array(param.PostParam.DelPermission.RecipientIDs),
 		param.PostParam.Flag,
 		param.PostParam.Period,
 		param.ReferDataID,
-		pq.Array(tagArray),
+		database.Array(tagArray),
 		param.PostParam.PersistenceInitParam.PersistenceSlotID, // TODO - Check param.PersistenceInitParam.DeleteLastObject?
-		pq.Array(extraDataArray),
+		database.Array(extraDataArray),
 		now,
 		now,
 	).Scan(&dataID)

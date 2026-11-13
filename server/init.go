@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"crypto/rand"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -19,31 +20,42 @@ import (
 )
 
 func init() {
+	// * `smm-server index ...` is a tool command, not the server
+	if len(os.Args) > 1 && os.Args[1] == "index" {
+		os.Exit(runIndexCommand(os.Args[2:]))
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "account" {
+		os.Exit(runAccountCommand(os.Args[2:]))
+	}
+
+	if wantsHelp() {
+		printHelp()
+		os.Exit(0)
+	}
+
 	globals.Logger = plogger.NewLogger()
 
 	var err error
 
-	err = godotenv.Load()
-	if err != nil {
-		globals.Logger.Warning("Error loading .env file")
+	// * A .env file next to the program is optional; only complain if it exists but cannot be read
+	if err = godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		globals.Logger.Warningf("Could not read .env: %s", err.Error())
 	}
+
+	// * Home/archive mode: sets up the data folder and the built-in S3 (see local.go)
+	setupLocalStorage()
 
 	s3Endpoint := os.Getenv("PN_SMM_CONFIG_S3_ENDPOINT")
 	s3AccessKey := os.Getenv("PN_SMM_CONFIG_S3_ACCESS_KEY")
 	s3AccessSecret := os.Getenv("PN_SMM_CONFIG_S3_ACCESS_SECRET")
 	s3SecureEnv := os.Getenv("PN_SMM_CONFIG_S3_SECURE")
 
-	postgresURI := os.Getenv("PN_SMM_POSTGRES_URI")
 	authenticationServerPort := os.Getenv("PN_SMM_AUTHENTICATION_SERVER_PORT")
 	secureServerHost := os.Getenv("PN_SMM_SECURE_SERVER_HOST")
 	secureServerPort := os.Getenv("PN_SMM_SECURE_SERVER_PORT")
 	gRPCServerPort := os.Getenv("PN_SMM_GRPC_SERVER_PORT")
 	gRPCAPIKey := os.Getenv("PN_SMM_GRPC_API_KEY")
-
-	if strings.TrimSpace(postgresURI) == "" {
-		globals.Logger.Error("PN_SMM_POSTGRES_URI environment variable not set")
-		os.Exit(0)
-	}
 
 	kerberosPassword := make([]byte, 0x10)
 	_, err = rand.Read(kerberosPassword)
@@ -98,7 +110,7 @@ func init() {
 		globals.GRPCServerPort = gRPCPort
 	}
 
-	if strings.TrimSpace(gRPCAPIKey) == "" {
+	if globals.GRPCServerPort > 0 && strings.TrimSpace(gRPCAPIKey) == "" {
 		globals.Logger.Warning("Insecure gRPC server detected. PN_SMM_GRPC_API_KEY environment variable not set")
 	}
 	globals.GRPCAPIKey = gRPCAPIKey
@@ -134,6 +146,15 @@ func init() {
 	globals.MinIOClient = minIOClient
 	globals.Presigner = globals.NewS3Presigner(globals.MinIOClient)
 
-	// * Connect to and setup databases
-	database.ConnectPostgres()
+	// * Open the catalog (SQLite)
+	database.Connect(catalogPath)
+
+	// * Home/archive mode: the account service Cemu logs in to (see local.go)
+	startHomeAccount()
+
+	// * Home/archive mode: fetch archived levels on demand (see local.go)
+	startFetching()
+
+	// * Whole-archive index and challenge seeds for the course lists (see selection_local.go)
+	startSelection()
 }

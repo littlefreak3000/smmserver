@@ -1,7 +1,6 @@
 package nex
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 
@@ -29,10 +28,7 @@ func StartAuthenticationServer() {
 	globals.AuthenticationEndpoint.OnData(func(packet nex.PacketInterface) {
 		request := packet.RMCMessage()
 
-		fmt.Println("=== SMM1 - Auth ===")
-		fmt.Printf("Protocol ID: %d\n", request.ProtocolID)
-		fmt.Printf("Method ID: %d\n", request.MethodID)
-		fmt.Println("==================")
+		globals.Tracef("authentication request: protocol %d method %d", request.ProtocolID, request.MethodID)
 	})
 
 	registerCommonAuthenticationServerProtocols()

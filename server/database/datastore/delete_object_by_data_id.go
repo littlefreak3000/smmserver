@@ -13,7 +13,7 @@ func DeleteObjectByDataID(dataID types.UInt64) *nex.Error {
 		return nexError
 	}
 
-	_, err := database.Postgres.Exec(`UPDATE datastore.objects SET deleted=TRUE WHERE data_id=$1`, dataID)
+	_, err := database.DB.Exec(`UPDATE datastore.objects SET deleted=TRUE WHERE data_id=$1`, dataID)
 	if err != nil {
 		globals.Logger.Error(err.Error())
 		// TODO - Send more specific errors?

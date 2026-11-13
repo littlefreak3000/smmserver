@@ -9,10 +9,21 @@ import (
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func GetObjectInfoByPersistenceTargetWithPassword(persistenceTarget datastore_types.DataStorePersistenceTarget, password types.UInt64) (datastore_types.DataStoreMetaInfo, *nex.Error) {
+	meta, e := getObjectInfoByPersistenceTarget(persistenceTarget, password, false)
+
+	if e != nil {
+		globals.Tracef("GetMeta by owner %d slot %d: %s", persistenceTarget.OwnerID, persistenceTarget.PersistenceSlotID, e.Message)
+	} else {
+		globals.Tracef("GetMeta by owner %d slot %d: data %d type %d name %q meta_binary %d bytes size %d", persistenceTarget.OwnerID, persistenceTarget.PersistenceSlotID, meta.DataID, meta.DataType, meta.Name, len(meta.MetaBinary), meta.Size)
+	}
+
+	return meta, e
+}
+
+func getObjectInfoByPersistenceTarget(persistenceTarget datastore_types.DataStorePersistenceTarget, password types.UInt64, retried bool) (datastore_types.DataStoreMetaInfo, *nex.Error) {
 	metaInfo := datastore_types.NewDataStoreMetaInfo()
 	metaInfo.Permission = datastore_types.NewDataStorePermission()
 	metaInfo.DelPermission = datastore_types.NewDataStorePermission()
@@ -25,7 +36,7 @@ func GetObjectInfoByPersistenceTargetWithPassword(persistenceTarget datastore_ty
 	var updatedDate time.Time
 	var tagArray []string
 
-	err := database.Postgres.QueryRow(`SELECT
+	err := database.DB.QueryRow(`SELECT
 		data_id,
 		owner,
 		size,
@@ -52,13 +63,13 @@ func GetObjectInfoByPersistenceTargetWithPassword(persistenceTarget datastore_ty
 		&metaInfo.DataType,
 		&metaInfo.MetaBinary,
 		&metaInfo.Permission.Permission,
-		pq.Array(&metaInfo.Permission.RecipientIDs),
+		database.Array(&metaInfo.Permission.RecipientIDs),
 		&metaInfo.DelPermission.Permission,
-		pq.Array(&metaInfo.DelPermission.RecipientIDs),
+		database.Array(&metaInfo.DelPermission.RecipientIDs),
 		&metaInfo.Period,
 		&metaInfo.ReferDataID,
 		&metaInfo.Flag,
-		pq.Array(&tagArray),
+		database.Array(&tagArray),
 		&createdDate,
 		&updatedDate,
 		&accessPassword,
@@ -67,6 +78,13 @@ func GetObjectInfoByPersistenceTargetWithPassword(persistenceTarget datastore_ty
 
 	if err != nil {
 		if err == sql.ErrNoRows {
+			// * a maker the archive knows (creator, record holder) gets a profile object made on the spot
+			if !retried && database.OnMissingProfile != nil && persistenceTarget.PersistenceSlotID == 0 && database.OnMissingProfile(uint32(persistenceTarget.OwnerID)) {
+				return getObjectInfoByPersistenceTarget(persistenceTarget, password, true)
+			}
+
+			globals.Tracef("profile of player %d (slot %d) not found", persistenceTarget.OwnerID, persistenceTarget.PersistenceSlotID)
+
 			return datastore_types.NewDataStoreMetaInfo(), nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")
 		}
 

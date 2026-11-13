@@ -16,6 +16,13 @@ func UploadCourseRecord(err error, packet nex.PacketInterface, callID uint32, pa
 
 	client := packet.Sender()
 
+	globals.Tracef("UploadCourseRecord level %d slot %d score %d", param.DataID, param.Slot, param.Score)
+
+	// * so the archived first clear and record are in place first: the upload must not become the "first clear"
+	if EnsureRecord != nil {
+		EnsureRecord(uint64(param.DataID))
+	}
+
 	nexError := datastore_smm_db.InsertOrUpdateCourseRecord(param.DataID, param.Slot, client.PID(), param.Score)
 	if nexError != nil {
 		return nil, nexError

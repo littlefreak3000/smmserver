@@ -8,7 +8,6 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func GetCustomRankingsByDataIDs(applicationID types.UInt32, dataIDs types.List[types.UInt64]) types.List[datastore_super_mario_maker_types.DataStoreCustomRankingResult] {
@@ -20,23 +19,21 @@ func GetCustomRankingsByDataIDs(applicationID types.UInt32, dataIDs types.List[t
 	// * away here and not sent back to the client
 	results := make(types.List[datastore_super_mario_maker_types.DataStoreCustomRankingResult], 0, len(dataIDs))
 
-	// * Using UNNEST and WITH ORDINALITY because the input
-	// * array may contain duplicate DataIDs. These duplicate
+	// * Using json_each (its "key" is the array index) because the
+	// * input array may contain duplicate DataIDs. These duplicate
 	// * DataIDs should result in duplicate results, and this
-	// * was the most efficient way to do this as it doesn't
-	// * involve processing all rows or manually duplicating
-	// * rows
-	rows, err := database.Postgres.Query(`
+	// * doesn't involve processing all rows or manually duplicating
+	// * rows. (The Postgres version used UNNEST ... WITH ORDINALITY.)
+	rows, err := database.DB.Query(`
 	SELECT
 		rankings.data_id,
 		rankings.value
-	FROM datastore.object_custom_rankings rankings
-	JOIN UNNEST($1::bigint[])
-	WITH ORDINALITY AS rows(data_id, ord)
-		ON rankings.data_id = rows.data_id
+	FROM json_each($1) AS rows
+	JOIN datastore.object_custom_rankings rankings
+		ON rankings.data_id = rows.value
 		AND rankings.application_id = $2
-	ORDER BY rows.ord`,
-		pq.Array(dataIDs),
+	ORDER BY rows.key`,
+		database.Array(dataIDs),
 		applicationID,
 	)
 

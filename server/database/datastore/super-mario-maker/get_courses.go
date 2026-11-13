@@ -11,7 +11,6 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 // GetCourses returns completed, visible courses joined with the custom ranking applicationID.
@@ -40,6 +39,13 @@ func queryCourses(applicationID uint32, newest, random bool, minScore, maxScore 
 		kindFilter = ` AND object.data_type <> 1`
 	}
 
+	// * The newest list has no ranking join, so it would otherwise include every object. It must only list
+	// * courses (data types 3-49, the same range GetUserCourseObjectIDs uses): not the event course metadata
+	// * object (type 50, ID 900000), maker profiles (type 1), etc. The game would try to open them as courses.
+	if newest {
+		kindFilter = ` AND object.data_type > 2 AND object.data_type < 50`
+	}
+
 	args := []any{applicationID, limit, offset}
 	if random {
 		join += ` ranking.value BETWEEN $4 AND $5 AND`
@@ -51,7 +57,7 @@ func queryCourses(applicationID uint32, newest, random bool, minScore, maxScore 
 		orderBy = `object.creation_date DESC, object.data_id DESC`
 	}
 
-	rows, err := database.Postgres.Query(`
+	rows, err := database.DB.Query(`
 		SELECT
 			object.data_id,
 			object.owner,
@@ -111,13 +117,13 @@ func queryCourses(applicationID uint32, newest, random bool, minScore, maxScore 
 			&course.MetaInfo.DataType,
 			&course.MetaInfo.MetaBinary,
 			&course.MetaInfo.Permission.Permission,
-			pq.Array(&course.MetaInfo.Permission.RecipientIDs),
+			database.Array(&course.MetaInfo.Permission.RecipientIDs),
 			&course.MetaInfo.DelPermission.Permission,
-			pq.Array(&course.MetaInfo.DelPermission.RecipientIDs),
+			database.Array(&course.MetaInfo.DelPermission.RecipientIDs),
 			&course.MetaInfo.Period,
 			&course.MetaInfo.ReferDataID,
 			&course.MetaInfo.Flag,
-			pq.Array(&tagArray),
+			database.Array(&tagArray),
 			&createdDate,
 			&updatedDate,
 			&course.Score,

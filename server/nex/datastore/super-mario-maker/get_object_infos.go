@@ -19,6 +19,13 @@ func GetObjectInfos(err error, packet nex.PacketInterface, callID uint32, dataID
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
+	// * a level that is only listed so far (index mode) must be downloaded before the game can fetch its file
+	if EnsureFetched != nil {
+		for i := range dataIDs {
+			EnsureFetched(uint64(dataIDs[i]))
+		}
+	}
+
 	pInfos := types.NewList[datastore_super_mario_maker_types.DataStoreFileServerObjectInfo]()
 
 	for i := range dataIDs {

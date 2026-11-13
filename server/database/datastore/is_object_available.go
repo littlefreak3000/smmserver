@@ -10,11 +10,20 @@ import (
 )
 
 func IsObjectAvailable(dataID types.UInt64) *nex.Error {
+	return isObjectAvailable(dataID, false)
+}
+
+func isObjectAvailable(dataID types.UInt64, retried bool) *nex.Error {
 	var underReview bool
 
-	err := database.Postgres.QueryRow(`SELECT under_review FROM datastore.objects WHERE data_id=$1 AND upload_completed=TRUE AND deleted=FALSE`, dataID).Scan(&underReview)
+	err := database.DB.QueryRow(`SELECT under_review FROM datastore.objects WHERE data_id=$1 AND upload_completed=TRUE AND deleted=FALSE`, dataID).Scan(&underReview)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			// * give on-demand fetching (if enabled) one chance to bring the level into the catalog
+			if !retried && database.OnMissing != nil && database.OnMissing(uint64(dataID)) {
+				return isObjectAvailable(dataID, true)
+			}
+
 			return nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")
 		}
 

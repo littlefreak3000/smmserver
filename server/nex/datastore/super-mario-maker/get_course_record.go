@@ -14,6 +14,12 @@ func GetCourseRecord(err error, packet nex.PacketInterface, callID uint32, param
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
+	globals.Tracef("GetCourseRecord level %d slot %d", param.DataID, param.Slot)
+
+	if EnsureRecord != nil {
+		EnsureRecord(uint64(param.DataID))
+	}
+
 	result, nexError := datastore_smm_db.GetCourseRecordByDataIDAndSlot(param.DataID, param.Slot)
 	if nexError != nil {
 		return nil, nexError

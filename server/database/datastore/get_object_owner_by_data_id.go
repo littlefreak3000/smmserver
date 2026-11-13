@@ -12,7 +12,7 @@ import (
 func GetObjectOwnerByDataID(dataID types.UInt64) (uint32, *nex.Error) {
 	var owner uint32
 
-	err := database.Postgres.QueryRow(`SELECT owner FROM datastore.objects WHERE data_id=$1`, dataID).Scan(&owner)
+	err := database.DB.QueryRow(`SELECT owner FROM datastore.objects WHERE data_id=$1`, dataID).Scan(&owner)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nex.NewError(nex.ResultCodes.DataStore.NotFound, "Object not found")

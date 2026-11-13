@@ -17,7 +17,7 @@ func GetBufferQueuesByDataIDAndSlot(dataID types.UInt64, slot types.UInt32) (typ
 
 	bufferQueues := types.NewList[types.QBuffer]()
 
-	rows, err := database.Postgres.Query(`SELECT buffer FROM datastore.buffer_queues WHERE data_id=$1 AND slot=$2 ORDER BY creation_date`, dataID, slot)
+	rows, err := database.DB.Query(`SELECT buffer FROM datastore.buffer_queues WHERE data_id=$1 AND slot=$2 ORDER BY creation_date`, dataID, slot)
 
 	// * No rows is allowed
 	if err != nil && err != sql.ErrNoRows {

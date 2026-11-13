@@ -10,7 +10,7 @@ func PreviousRankingPeriod(applicationID uint32) (uint32, bool) {
 	kind := uint64(applicationID) / 100000000 * 100000000
 
 	var prev *int64
-	err := database.Postgres.QueryRow(`
+	err := database.DB.QueryRow(`
 		SELECT MAX(application_id) FROM datastore.object_custom_rankings
 		WHERE application_id < $1 AND application_id >= $2
 	`, int64(applicationID), int64(kind)).Scan(&prev)

@@ -3,10 +3,12 @@ package nex
 import (
 	"os"
 
+	"github.com/PretendoNetwork/nex-go/v2"
 	"github.com/PretendoNetwork/nex-go/v2/types"
 	datastorecommon "github.com/PretendoNetwork/nex-protocols-common-go/v2/datastore"
 	securecommon "github.com/PretendoNetwork/nex-protocols-common-go/v2/secure-connection"
 	datastoresmm "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/super-mario-maker"
+	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	secure "github.com/PretendoNetwork/nex-protocols-go/v2/secure-connection"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
@@ -58,7 +60,26 @@ func registerCommonSecureProtocols() {
 
 	commonDataStoreProtocol.GetObjectInfoByDataID = datastore_db.GetObjectInfoByDataID
 	commonDataStoreProtocol.GetObjectInfoByPersistenceTargetWithPassword = datastore_db.GetObjectInfoByPersistenceTargetWithPassword
-	commonDataStoreProtocol.GetObjectInfoByDataIDWithPassword = datastore_db.GetObjectInfoByDataIDWithPassword
+	commonDataStoreProtocol.GetObjectInfoByDataIDWithPassword = func(dataID, password types.UInt64) (datastore_types.DataStoreMetaInfo, *nex.Error) {
+		// * PrepareGetObject / GetMeta of a level that is only listed so far (whole-archive index): download it first
+		if nex_datastore_super_mario_maker.EnsureFetched != nil {
+			nex_datastore_super_mario_maker.EnsureFetched(uint64(dataID))
+		}
+
+		meta, e := datastore_db.GetObjectInfoByDataIDWithPassword(dataID, password)
+		if e != nil {
+			globals.Tracef("GetMeta/PrepareGet by data id %d: %s", dataID, e.Message)
+		} else {
+			globals.Tracef("GetMeta/PrepareGet by data id %d: owner %d type %d", dataID, meta.OwnerID, meta.DataType)
+
+			// * a level the game opens counts as played: random lists offer other levels first from now on
+			if nex_datastore_super_mario_maker.Played != nil && meta.DataType > 2 && meta.DataType < 50 {
+				nex_datastore_super_mario_maker.Played(uint64(dataID))
+			}
+		}
+
+		return meta, e
+	}
 	commonDataStoreProtocol.GetObjectOwnerByDataID = datastore_db.GetObjectOwnerByDataID
 	commonDataStoreProtocol.GetObjectSizeByDataID = datastore_db.GetObjectSizeByDataID
 

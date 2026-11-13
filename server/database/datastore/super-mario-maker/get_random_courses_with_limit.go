@@ -11,13 +11,12 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func GetRandomCoursesWithLimit(limit int) (types.List[datastore_super_mario_maker_types.DataStoreCustomRankingResult], *nex.Error) {
 	courses := types.NewList[datastore_super_mario_maker_types.DataStoreCustomRankingResult]()
 
-	rows, err := database.Postgres.Query(`
+	rows, err := database.DB.Query(`
 		SELECT
 			object.data_id,
 			object.owner,
@@ -81,13 +80,13 @@ func GetRandomCoursesWithLimit(limit int) (types.List[datastore_super_mario_make
 			&course.MetaInfo.DataType,
 			&course.MetaInfo.MetaBinary,
 			&course.MetaInfo.Permission.Permission,
-			pq.Array(&course.MetaInfo.Permission.RecipientIDs),
+			database.Array(&course.MetaInfo.Permission.RecipientIDs),
 			&course.MetaInfo.DelPermission.Permission,
-			pq.Array(&course.MetaInfo.DelPermission.RecipientIDs),
+			database.Array(&course.MetaInfo.DelPermission.RecipientIDs),
 			&course.MetaInfo.Period,
 			&course.MetaInfo.ReferDataID,
 			&course.MetaInfo.Flag,
-			pq.Array(&tagArray),
+			database.Array(&tagArray),
 			&createdDate,
 			&updatedDate,
 			&course.Score,

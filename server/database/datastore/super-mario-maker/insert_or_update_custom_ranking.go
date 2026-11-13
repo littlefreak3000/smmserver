@@ -15,7 +15,7 @@ func InsertOrUpdateCustomRanking(dataID types.UInt64, applicationID, score types
 		return nexError
 	}
 
-	_, err := database.Postgres.Exec(`INSERT INTO datastore.object_custom_rankings (
+	_, err := database.DB.Exec(`INSERT INTO datastore.object_custom_rankings (
 		data_id,
 		application_id,
 		value

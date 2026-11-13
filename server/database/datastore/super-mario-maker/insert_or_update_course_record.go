@@ -17,9 +17,9 @@ func InsertOrUpdateCourseRecord(dataID types.UInt64, slot types.UInt8, pid types
 		return nexError
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 
-	_, err := database.Postgres.Exec(`INSERT INTO datastore.course_records (
+	_, err := database.DB.Exec(`INSERT INTO datastore.course_records (
 		data_id,
 		slot,
 		first_pid,

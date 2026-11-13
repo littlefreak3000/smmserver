@@ -8,7 +8,7 @@ import (
 )
 
 func InitializeObjectRatingWithSlot(dataID uint64, param datastore_types.DataStoreRatingInitParamWithSlot) *nex.Error {
-	_, err := database.Postgres.Exec(`INSERT INTO datastore.object_ratings (
+	_, err := database.DB.Exec(`INSERT INTO datastore.object_ratings (
 		data_id,
 		slot,
 		flag,

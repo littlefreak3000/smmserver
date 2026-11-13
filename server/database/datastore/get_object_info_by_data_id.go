@@ -9,7 +9,6 @@ import (
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
-	"github.com/lib/pq"
 )
 
 func GetObjectInfoByDataID(dataID types.UInt64) (datastore_types.DataStoreMetaInfo, *nex.Error) {
@@ -28,7 +27,7 @@ func GetObjectInfoByDataID(dataID types.UInt64) (datastore_types.DataStoreMetaIn
 	var updatedDate time.Time
 	var tagArray []string
 
-	err := database.Postgres.QueryRow(`SELECT
+	err := database.DB.QueryRow(`SELECT
 		data_id,
 		owner,
 		size,
@@ -53,13 +52,13 @@ func GetObjectInfoByDataID(dataID types.UInt64) (datastore_types.DataStoreMetaIn
 		&metaInfo.DataType,
 		&metaInfo.MetaBinary,
 		&metaInfo.Permission.Permission,
-		pq.Array(&metaInfo.Permission.RecipientIDs),
+		database.Array(&metaInfo.Permission.RecipientIDs),
 		&metaInfo.DelPermission.Permission,
-		pq.Array(&metaInfo.DelPermission.RecipientIDs),
+		database.Array(&metaInfo.DelPermission.RecipientIDs),
 		&metaInfo.Period,
 		&metaInfo.ReferDataID,
 		&metaInfo.Flag,
-		pq.Array(&tagArray),
+		database.Array(&tagArray),
 		&createdDate,
 		&updatedDate,
 	)
