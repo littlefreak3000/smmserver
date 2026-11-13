@@ -264,3 +264,7 @@ python tools/nex-smoke/nex_live.py --account http://127.0.0.1:8080 --ondemand 18
   All 200 live-test files passed validation (four ASH0 chunks, decoded sizes, JPEG thumbnails), so the `meta_binary` chunk
   split holds on real data; what is unverified is only the three unknown fields and the CRC rule.
 * Upstream quirk left as is: `InitializeObjectByPreparePostParam` builds `extraData` by iterating `Tags`.
+
+## Licence
+
+AGPL-3.0, like the project it is forked from (see [LICENSE](LICENSE)). If you run a changed version for other people, you must offer them its source code.
