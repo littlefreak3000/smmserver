@@ -9,6 +9,30 @@ repos/    upstream clones used for reference (smm-server, SMMDB)   samples/  one
 archive/  a one-level archive (the SMMDB sample)      archive-live/  404 levels fetched by the server (101 per clear-rate band, 19.5 MB; ready to run)
 ```
 
+## Where the code comes from, and updating it
+
+`server/` is a fork of [Protarium-Network/super-mario-maker](https://github.com/Protarium-Network/super-mario-maker), which comes
+from [PretendoNetwork/super-mario-maker](https://github.com/PretendoNetwork/super-mario-maker) (AGPL-3.0). This repository keeps that
+history: the upstream commit `6d49108` was imported into `server/` with `git subtree`, and the home-server changes sit in a commit on
+top, so `git log server/` and `git blame` show which lines are ours and which are theirs.
+
+Remotes: `upstream` (Protarium, the one `server/` follows) and `pretendo` (the original). Pushing to both is disabled.
+
+To bring in upstream changes:
+
+```
+git fetch upstream pretendo
+git log --oneline HEAD..upstream/main       # what is new
+git subtree pull --prefix=server upstream main -m "Merge upstream"
+```
+
+Conflicts can only be in files we changed (mostly `server/database/`, `server/nex/register_common_secure_server_protocols.go`
+and `server/init.go`); fix them as in any merge. `tools/`, `docs/` and `fake-s3/` are ours alone.
+
+Not in the repository (see `.gitignore`): server data (`archive-live/`, `data/`, `secrets.json`), built programs and zips
+(`dist/`), logs, and downloaded reference copies. No level files are committed: the few tests that need a real course file
+are skipped unless you add one (see `server/levelimport/testdata/README.md`).
+
 ## Why it looks like this
 
 Goal: run old levels at home from a portable archive, without Postgres or an S3 service.
