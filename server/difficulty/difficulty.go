@@ -65,6 +65,137 @@ func (p Prior) PercentCounts(clears, attempts int64) int {
 	return int(math.Round(100 * p.ScoreCounts(clears, attempts)))
 }
 
+// Margin is how many percentage points beyond a requested range a level can still be offered for it: a level whose score is
+// further away than this has so little chance of belonging to the range that it is not considered.
+const Margin = 25
+
+// Window is the range of scores (whole percent, clamped to 0..100) whose levels may be offered for lo..hi.
+func Window(lo, hi int) (int, int) {
+	return max(lo-Margin, 0), min(hi+Margin, 100)
+}
+
+// InRange is the confidence that a level belongs to the difficulty range lo..hi (whole percent, inclusive, 0..100): the
+// probability, under the posterior the score is the mean of, that the level's true clear rate lies in the range. A level
+// with many attempts has a narrow posterior, so the answer is close to 0 or 1; a level with few has a wide one, so it
+// belongs to a range with a probability below 1 and to its neighbours with a probability above 0. It is the basis of "the
+// less we know about a level, the wider the range it can be placed in".
+//
+// With no prior (Strength 0) there is no posterior and the answer is 1 or 0 by the score alone, as before.
+func (p Prior) InRange(rate, attempts float64, lo, hi int) float64 {
+	if attempts <= 0 {
+		return 0
+	}
+
+	if lo <= 0 && hi >= 100 {
+		return 1
+	}
+
+	if p.Strength <= 0 {
+		if s := int(math.Round(100 * p.Score(rate, attempts))); s >= lo && s <= hi {
+			return 1
+		}
+
+		return 0
+	}
+
+	clears := rate * attempts
+	a := clears + p.Mean*p.Strength
+	b := (attempts - clears) + (1-p.Mean)*p.Strength
+
+	x1, x2 := 0.0, 1.0
+	if lo > 0 {
+		x1 = (float64(lo) - 0.5) / 100
+	}
+
+	if hi < 100 {
+		x2 = (float64(hi) + 0.5) / 100
+	}
+
+	return math.Max(0, math.Min(1, betaI(a, b, x2)-betaI(a, b, x1)))
+}
+
+// betaI is the regularised incomplete beta function I_x(a, b): the probability that a Beta(a, b) variable is at most x.
+func betaI(a, b, x float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+
+	if x >= 1 {
+		return 1
+	}
+
+	la, _ := math.Lgamma(a + b)
+	lb, _ := math.Lgamma(a)
+	lc, _ := math.Lgamma(b)
+	front := math.Exp(la - lb - lc + a*math.Log(x) + b*math.Log(1-x))
+
+	if x < (a+1)/(a+b+2) {
+		return front * betaCF(a, b, x) / a
+	}
+
+	return 1 - front*betaCF(b, a, 1-x)/b
+}
+
+// betaCF evaluates the continued fraction of the incomplete beta function (modified Lentz's method).
+func betaCF(a, b, x float64) float64 {
+	const (
+		tiny = 1e-300
+		eps  = 1e-14
+	)
+
+	qab, qap, qam := a+b, a+1, a-1
+	c, d := 1.0, 1-qab*x/qap
+
+	if math.Abs(d) < tiny {
+		d = tiny
+	}
+
+	d = 1 / d
+	h := d
+
+	for m := 1; m <= 300; m++ {
+		fm := float64(m)
+		m2 := 2 * fm
+
+		aa := fm * (b - fm) * x / ((qam + m2) * (a + m2))
+		d = 1 + aa*d
+
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+
+		c = 1 + aa/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+
+		d = 1 / d
+		h *= d * c
+
+		aa = -(a + fm) * (qab + fm) * x / ((a + m2) * (qap + m2))
+		d = 1 + aa*d
+
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+
+		c = 1 + aa/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+
+		d = 1 / d
+		del := d * c
+		h *= del
+
+		if math.Abs(del-1) < eps {
+			break
+		}
+	}
+
+	return h
+}
+
 // SQL is the score as an SQL expression over a clear_rate column and an attempts column, with the prior written in as
 // numbers (so it needs no query arguments).
 func (p Prior) SQL(rateColumn, attemptsColumn string) string {

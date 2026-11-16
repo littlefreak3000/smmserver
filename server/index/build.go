@@ -278,7 +278,7 @@ func (b *Builder) Finish() (Stats, error) {
 		return b.stats, err
 	}
 
-	b.stats.Fingerprint = fingerprint(b.stats.Total, sumID, b.stats.Counts)
+	b.stats.Fingerprint = fingerprint(b.stats.Total, sumID, b.stats.Counts, difficulty.Current.String())
 
 	for k, v := range map[string]string{
 		"schema": "1", "algorithm": fmt.Sprint(AlgorithmVersion), "levels": fmt.Sprint(b.stats.Total),
@@ -310,8 +310,17 @@ func (b *Builder) Finish() (Stats, error) {
 
 // fingerprint identifies the set of levels in an index (not the order they were added in): two players with the same
 // fingerprint get the same levels from the same seed.
-func fingerprint(total, sumID int64, counts [101]int64) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("smm-index-v%d|n=%d|sumid=%d|counts=%v", AlgorithmVersion, total, sumID, counts)))
+//
+// An index built with a difficulty prior draws its lists differently from one built without (levels are offered for
+// neighbouring ranges in proportion to how unsure their rate is), so the prior is part of the fingerprint, and with it of
+// every challenge code. Without a prior ("off") the fingerprint is what it always was.
+func fingerprint(total, sumID int64, counts [101]int64, prior string) string {
+	text := fmt.Sprintf("smm-index-v%d|n=%d|sumid=%d|counts=%v", AlgorithmVersion, total, sumID, counts)
+	if prior != "" && prior != "off" {
+		text += "|prior=" + prior
+	}
+
+	sum := sha256.Sum256([]byte(text))
 
 	return strings.ToUpper(hex.EncodeToString(sum[:4]))
 }

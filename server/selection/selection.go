@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/index"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
@@ -258,11 +259,25 @@ func randomSeed() string {
 //
 // With fresh set (an unseeded list) the levels that were played recently go to the back, so a round does not hand out
 // the same levels again while others exist, and NeedMore hears when the unplayed ones run low.
+//
+// In a catalog with a difficulty prior, a difficulty range is weighted by confidence, as in index.Sample: the levels whose
+// score lies within difficulty.Margin points of the range are considered, and each is accepted with the probability that its
+// true clear rate lies in the range, decided by a second number from the same hash so the list stays a pure function of the
+// seed and the catalog. Levels that are not from the archive (no counts) are in or out by their ranking value.
 func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, bool, error) {
+	soft := difficulty.Current.Strength > 0 && q.App == s.DifficultyApp && !(q.Min <= 0 && q.Max >= 100)
+	qLo, qHi := q.Min, q.Max
+
+	if soft {
+		lo, hi := difficulty.Window(int(q.Min), int(q.Max))
+		qLo, qHi = int64(lo), int64(hi)
+	}
+
 	rows, err := s.DB.Query(`
-		SELECT o.data_id FROM datastore.objects o
+		SELECT o.data_id, r.value, ls.clear_rate, ls.attempts FROM datastore.objects o
 		JOIN datastore.object_custom_rankings r ON r.data_id = o.data_id AND r.application_id = $1 AND r.value BETWEEN $2 AND $3
-		WHERE o.upload_completed = TRUE AND o.deleted = FALSE AND o.under_review = FALSE AND o.data_type > 2 AND o.data_type < 50`, q.App, q.Min, q.Max)
+		LEFT JOIN datastore.level_sources ls ON ls.data_id = o.data_id AND ls.attempts > 0
+		WHERE o.upload_completed = TRUE AND o.deleted = FALSE AND o.under_review = FALSE AND o.data_type > 2 AND o.data_type < 50`, q.App, qLo, qHi)
 	if err != nil {
 		return nil, false, err
 	}
@@ -279,13 +294,35 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 	norm, ctx := index.NormalizeSeed(seed), q.context(q.Min, q.Max)
 
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var (
+			id       int64
+			value    int64
+			rate     sql.NullFloat64
+			attempts sql.NullInt64
+		)
+
+		if err := rows.Scan(&id, &value, &rate, &attempts); err != nil {
 			return nil, false, err
 		}
 
 		if s.skip(id) {
 			continue
+		}
+
+		if soft {
+			var confidence float64
+
+			switch {
+			case rate.Valid && attempts.Valid:
+				confidence = difficulty.Current.InRange(rate.Float64, float64(attempts.Int64), int(q.Min), int(q.Max))
+			case value >= q.Min && value <= q.Max:
+				confidence = 1
+			}
+
+			a := sha256.Sum256([]byte(fmt.Sprintf("smm-accept-v%d\x00%s\x00%s\x00%d", index.AlgorithmVersion, norm, ctx, id)))
+			if float64(binary.BigEndian.Uint64(a[:8]))/(1<<64) >= confidence {
+				continue
+			}
 		}
 
 		h := sha256.Sum256([]byte(fmt.Sprintf("smm-pick-v%d\x00%s\x00%s\x00%d", index.AlgorithmVersion, norm, ctx, id)))

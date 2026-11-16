@@ -97,3 +97,110 @@ func TestSQLAgreesWithTheGoScore(t *testing.T) {
 		t.Errorf("SQL() = %s", got)
 	}
 }
+
+// numericMass integrates the Beta(a, b) density between x1 and x2 with Simpson's rule: an independent check of betaI.
+func numericMass(a, b, x1, x2 float64) float64 {
+	la, _ := math.Lgamma(a + b)
+	lb, _ := math.Lgamma(a)
+	lc, _ := math.Lgamma(b)
+	pdf := func(x float64) float64 {
+		if x <= 0 || x >= 1 {
+			return 0
+		}
+
+		return math.Exp(la - lb - lc + (a-1)*math.Log(x) + (b-1)*math.Log(1-x))
+	}
+
+	const n = 200000 // even
+
+	h := (x2 - x1) / n
+	sum := pdf(x1+1e-12) + pdf(x2-1e-12)
+
+	for i := 1; i < n; i++ {
+		w := 2.0
+		if i%2 == 1 {
+			w = 4
+		}
+
+		sum += w * pdf(x1+float64(i)*h)
+	}
+
+	return sum * h / 3
+}
+
+func TestBetaIMatchesNumericIntegration(t *testing.T) {
+	for _, c := range []struct{ a, b, x1, x2 float64 }{
+		{3.6, 2.4, 0.0, 0.5}, {20.6, 380.4, 0.045, 0.055}, {1.6, 24.4, 0.0, 0.05}, {40.6, 160.4, 0.15, 0.25},
+		{8.6, 2.4, 0.5, 1.0}, {2, 2, 0.2, 0.8}, {5.5, 40.5, 0.0, 0.2}, {120.6, 80.4, 0.5, 0.7},
+	} {
+		got := betaI(c.a, c.b, c.x2) - betaI(c.a, c.b, c.x1)
+
+		if want := numericMass(c.a, c.b, c.x1, c.x2); math.Abs(got-want) > 1e-5 {
+			t.Errorf("Beta(%v, %v) on [%v, %v]: %.8f, numeric integral %.8f", c.a, c.b, c.x1, c.x2, got, want)
+		}
+	}
+
+	if betaI(2, 3, 0) != 0 || betaI(2, 3, 1) != 1 {
+		t.Error("the ends of the distribution are wrong")
+	}
+}
+
+func TestInRangeIsConfidence(t *testing.T) {
+	p := Default
+
+	// * the ranges of a partition of 0..100 share one level: the masses add up to 1
+	for _, c := range []struct{ clears, attempts float64 }{{3, 3}, {1, 25}, {20, 400}, {0, 9}, {150, 300}} {
+		sum := 0.0
+		for _, r := range [][2]int{{0, 4}, {5, 19}, {20, 49}, {50, 100}} {
+			sum += p.InRange(c.clears/c.attempts, c.attempts, r[0], r[1])
+		}
+
+		if math.Abs(sum-1) > 1e-6 {
+			t.Errorf("%v/%v: the four bands add up to %v, want 1", c.clears, c.attempts, sum)
+		}
+	}
+
+	// * a well-played level is confidently in its own range and hardly in the next one
+	thick := p.InRange(0.12, 600, 5, 19)
+	if thick < 0.95 || p.InRange(0.12, 600, 20, 49) > 0.01 {
+		t.Errorf("600 attempts at 12 %%: %v in 5-19, %v in 20-49", thick, p.InRange(0.12, 600, 20, 49))
+	}
+
+	// * the same rate on few attempts is less sure of its range and spreads into the neighbours
+	thin := p.InRange(0.12, 12, 5, 19)
+	if !(thin < thick-0.2) || p.InRange(0.12, 12, 20, 49) < 0.05 || p.InRange(0.12, 12, 0, 4) < 0.02 {
+		t.Errorf("12 attempts at 12 %%: %v in 5-19 (thick %v), %v in 20-49, %v in 0-4", thin, thick, p.InRange(0.12, 12, 20, 49), p.InRange(0.12, 12, 0, 4))
+	}
+
+	// * more attempts at the same rate never lowers the confidence in the range the rate sits well inside
+	last := 0.0
+
+	for _, a := range []float64{10, 25, 60, 150, 400, 1000} {
+		m := p.InRange(0.12, a, 5, 19)
+		if m < last-1e-9 {
+			t.Errorf("confidence fell from %v to %v at %v attempts", last, m, a)
+		}
+
+		last = m
+	}
+
+	// * no attempts, no confidence; the whole scale is always certain
+	if p.InRange(0.5, 0, 0, 100) != 0 || p.InRange(0.5, 10, 0, 100) != 1 {
+		t.Error("the end cases are wrong")
+	}
+
+	// * without a prior there is no softness: the score decides, as before
+	if (Prior{}).InRange(0.04, 25, 0, 4) != 1 || (Prior{}).InRange(0.06, 25, 0, 4) != 0 {
+		t.Error("with no prior a level is in or out by its rate")
+	}
+}
+
+func TestWindowCoversTheSoftEdges(t *testing.T) {
+	if lo, hi := Window(0, 5); lo != 0 || hi != 5+Margin {
+		t.Errorf("Window(0, 5) = %d, %d", lo, hi)
+	}
+
+	if lo, hi := Window(50, 100); lo != 50-Margin || hi != 100 {
+		t.Errorf("Window(50, 100) = %d, %d", lo, hi)
+	}
+}

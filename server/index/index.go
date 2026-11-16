@@ -16,8 +16,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
+
+// coinScale is the resolution of the acceptance coin in Sample: a candidate with confidence c is accepted when a number drawn
+// from [0, coinScale) is below c × coinScale.
+const coinScale = 1 << 24
 
 // Level is one row of the index.
 type Level struct {
@@ -45,7 +50,8 @@ type Index struct {
 	counts      [101]int64
 	total       int64
 	fingerprint string
-	prior       string // the difficulty prior of the buckets
+	prior       string           // the difficulty prior of the buckets, as a setting
+	pv          difficulty.Prior // the same, parsed: it also decides how confident a level is of its range (see Sample)
 	prefixes    map[int64]string
 	keypairs    map[int64]string
 }
@@ -125,6 +131,10 @@ func Open(path string) (*Index, error) {
 	// * an index built before the difficulty prior existed sorted levels by their raw clear rate
 	x.prior = "off"
 	_ = db.QueryRow(`SELECT value FROM meta WHERE key = 'difficulty_prior'`).Scan(&x.prior)
+
+	if pv, err := difficulty.Parse(x.prior); err == nil {
+		x.pv = pv
+	}
 
 	if x.total == 0 {
 		return fail(errors.New("it contains no levels"))
@@ -216,8 +226,14 @@ func (x *Index) Newest(offset, n int) ([]Level, error) { return x.list("upload D
 // TopStars returns levels by star count, most first.
 func (x *Index) TopStars(offset, n int) ([]Level, error) { return x.list("stars DESC, id", offset, n) }
 
-// Sample draws up to n distinct levels whose clear rate is between lo and hi percent (inclusive), uniformly over all
-// such levels. skip may exclude levels (for example ones known to have no capture).
+// Sample draws up to n distinct levels whose clear rate is between lo and hi percent (inclusive). skip may exclude levels
+// (for example ones known to have no capture).
+//
+// In an index built without a difficulty prior this is uniform over all levels in the range. In one built with a prior it is
+// weighted by confidence: candidates are drawn uniformly from the range widened by difficulty.Margin points on each side,
+// and each is accepted with the probability that its true clear rate lies in lo..hi (difficulty.Prior.InRange). A level
+// with many attempts is almost always in its own range and almost never in the next; a level with few attempts is placed in
+// a wider range, in proportion to how little is known about it. A whole-scale request (0..100) is not weighted.
 //
 // It uses one algorithm for every n, so with the same Source a longer request starts with exactly the levels of a shorter
 // one: asking for 32 and then for 100 gives the same first 32. If the range holds fewer than n levels it returns all of them.
@@ -227,8 +243,17 @@ func (x *Index) Sample(src Source, lo, hi, n int, skip func(id int64) bool) ([]L
 		return nil, nil
 	}
 
+	// * the weighted draw looks beyond the range, at levels whose rate is only probably (or possibly) inside it
+	soft := x.pv.Strength > 0 && !(lo <= 0 && hi >= 100)
+	cLo, cHi, budget := lo, hi, n*40+200
+
+	if soft {
+		cLo, cHi = difficulty.Window(lo, hi)
+		budget = n*80 + 400
+	}
+
 	var total int64
-	for b := lo; b <= hi; b++ {
+	for b := cLo; b <= cHi; b++ {
 		total += x.counts[b]
 	}
 
@@ -239,17 +264,28 @@ func (x *Index) Sample(src Source, lo, hi, n int, skip func(id int64) bool) ([]L
 	out := make([]Level, 0, n)
 	seen := make(map[int64]bool, n)
 
-	for attempts := 0; len(out) < n && attempts < n*40+200; attempts++ {
+	for attempts := 0; len(out) < n && attempts < budget; attempts++ {
 		k := int64(src.IntN(int(total)))
 
-		bucket := lo
-		for ; bucket < hi && k >= x.counts[bucket]; bucket++ {
+		// * one coin per candidate, drawn whether or not it is needed, so the stream never depends on the levels met
+		var coin int
+
+		if soft {
+			coin = src.IntN(coinScale)
+		}
+
+		bucket := cLo
+		for ; bucket < cHi && k >= x.counts[bucket]; bucket++ {
 			k -= x.counts[bucket]
 		}
 
 		l, err := x.scan(x.db.QueryRow(`SELECT `+levelColumns+` FROM levels WHERE bucket = ? AND seq = ?`, bucket, k))
 		if err != nil {
 			return nil, fmt.Errorf("index: bucket %d position %d: %w", bucket, k, err)
+		}
+
+		if soft && float64(coin) >= x.pv.InRange(float64(l.Clears)/float64(l.Attempts), float64(l.Attempts), lo, hi)*coinScale {
+			continue
 		}
 
 		if seen[l.ID] || (skip != nil && skip(l.ID)) {

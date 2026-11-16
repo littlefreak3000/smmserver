@@ -47,6 +47,37 @@ The score is used in four places:
 - the buckets of the whole-archive index;
 - the bands of `smm-server cache build`.
 
+## Confidence: thin levels are placed in a wider range
+
+The score alone still gives every level one fixed place. But a level with few plays could belong to a neighbouring range as easily as to its own, and a level with many plays could not. So when the game asks for levels in a difficulty range, each level is offered with a **confidence**: the probability that its true clear rate lies in the requested range. It comes from the same Beta distribution the score is the mean of, with the level's own clears and failures as the evidence:
+
+```
+confidence = P( lo ≤ true clear rate ≤ hi )     where  rate ~ Beta(clears + mean × strength, failures + (1 − mean) × strength)
+```
+
+A level with 600 attempts at 12 % is, for practical purposes, certain to be in the range 5-19 and is never offered for 20-49. The same 12 % on 12 attempts is 66 % sure of 5-19, 22 % sure of 20-49 and 12 % sure of 0-4, so it turns up in all three. The less is known about a level, the more ranges it can turn up in, in proportion to the doubt. The numbers come from the data, not from a setting: more attempts narrow the distribution.
+
+How a list is drawn:
+
+- Candidates come from the range widened by 25 points on each side (levels further away have almost no chance of belonging), and each is accepted with its confidence. This is how the whole-archive index draws, and how the plain catalog draws a difficulty range (with a seed or without).
+- A request for the whole scale (0-100) is not weighted. Levels that are not from the archive (made on this server) have no counts and are in or out by their value.
+- A seeded list is still a pure function of the seed and the levels: the coin that decides each acceptance comes from the seed's own stream (index) or from the seed's hash of the level (catalog). A longer request still starts with exactly the levels of a shorter one.
+- With `SMM_DIFFICULTY_PRIOR=off` there is no distribution to ask, and range membership is as sharp as before.
+
+Measured on the sample of 300 (the default prior):
+
+| | |
+|---|---|
+| Mean confidence of a level in its own band | 91 % (median 98 %) |
+| Levels less than 90 % sure of their band | 87 of 300 |
+| Levels less than 70 % sure | 31 of 300 |
+| Levels less than 50 % sure | 2 of 300 |
+| Share of a list that comes from a neighbouring band | 13 % for 0-4, 6 % for 5-19, 12 % for 20-49, 6 % for 50-100 |
+
+So a list for a range is mostly its own levels, with a few levels from next door that could just as well belong there: a level with 4 clears in 8 attempts is 65 % sure of its band, one with 1 clear in 25 only 51 %.
+
+An index built with a prior is drawn this way and an index built without is not, so **the prior is part of the index's fingerprint**, and with it of every challenge code: two players whose codes match drew from the same kind of index. An index without a prior keeps the fingerprint it always had.
+
 ## Settings
 
 `SMM_DIFFICULTY_PRIOR` in `data/settings.env`:
@@ -65,8 +96,5 @@ A stronger prior stabilises thin levels more and moves well-played levels more t
 
 ## Not built
 
-These were considered and left out; each needs a decision about what "difficulty" should mean, or data this archive does not have.
-
-- **Soft band edges.** Accept a level for a range with the probability that its true rate lies in the range, so borderline levels appear in both neighbouring lists. It needs rejection sampling in the index and the catalog queries.
-- **Correcting for retries or length.** The world record time is in the metadata and correlates with the clear rate, so a long level with a low rate could be told apart from a short, cruel one. Whether a long level should rank as harder than a short one with the same rate is a design choice. The level file itself (length, enemies, time limit) holds more signal but is only available after download.
-- **Excluding thin levels from the hardest and easiest lists** instead of moving them. Easy to add, but the archive has so few of them that it hardly matters.
+- **Correcting for retries.** Attempts include every retry by the same player, so a hard level that people keep trying has a lower clear rate than the share of players who finish it. The archive has no per-player counts, so this cannot be corrected from the metadata.
+- Level length is not treated as a measure of difficulty and plays no part in any of this.
