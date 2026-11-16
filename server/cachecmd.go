@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
 	"github.com/PretendoNetwork/super-mario-maker/pool"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
@@ -107,6 +108,36 @@ func cacheBuild(dir string, args []string) int {
 
 	fmt.Println(".\nCtrl+C stops it; running the same command again carries on.")
 
+	// * which levels land in which band depends on the difficulty prior, so it is part of what a seed means: an existing cache
+	// * keeps its own, a new one takes SMM_DIFFICULTY_PRIOR or the default, and the manifest records it
+	prior, err := difficulty.Parse(os.Getenv("SMM_DIFFICULTY_PRIOR"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+
+		return 2
+	}
+
+	if existing, err := pool.ReadManifest(dir); err == nil && existing != nil {
+		own, perr := pool.ManifestPrior(existing)
+		if perr != nil {
+			fmt.Fprintln(os.Stderr, perr)
+
+			return 1
+		}
+
+		if os.Getenv("SMM_DIFFICULTY_PRIOR") != "" && own != prior {
+			fmt.Fprintf(os.Stderr, "this cache was built with the difficulty prior %q, not %q; levels would land in other bands. Unset SMM_DIFFICULTY_PRIOR to carry on with the cache's own, or use another folder.\n", own.String(), prior.String())
+
+			return 1
+		}
+
+		prior = own
+	}
+
+	difficulty.Current = prior
+
+	fmt.Printf("Difficulty prior: %s (part of what the seed means; recorded in the cache)\n", prior.String())
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -172,6 +203,10 @@ func cacheInfo(dir string) int {
 	}
 
 	fmt.Printf("cache:        %s\nlocked:       %v\nlevels per band: %v of %d wanted\nbuilt:        %s\n", kind, m.Locked, m.PerBand, m.Wanted, m.Built.Local().Format("2006-01-02 15:04"))
+
+	if p, err := pool.ManifestPrior(m); err == nil {
+		fmt.Printf("difficulty prior: %s\n", p.String())
+	}
 
 	if m.Fingerprint != fp {
 		fmt.Printf("note: the manifest says fingerprint %s; levels were added or removed since the last build or lock.\n", m.Fingerprint)

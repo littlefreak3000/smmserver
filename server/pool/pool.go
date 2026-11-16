@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
@@ -102,6 +103,12 @@ func (p *Pool) bands() []Band {
 	return p.Bands
 }
 
+// bandOfLevel is the band a level belongs to by its difficulty score (see package difficulty), which for a level with few
+// attempts is not its raw clear rate.
+func (p *Pool) bandOfLevel(lvl *upstream.Level) int {
+	return p.bandOf(difficulty.Current.Score(lvl.ClearRate, float64(lvl.TotalAttempts)))
+}
+
 func (p *Pool) bandOf(rate float64) int {
 	if rate < 0 {
 		rate = 0
@@ -125,7 +132,9 @@ func (p *Pool) Counts() ([]int, error) {
 	out := make([]int, len(p.bands()))
 
 	for i, b := range p.bands() {
-		if err := p.DB.QueryRow(`SELECT COUNT(*) FROM datastore.level_sources WHERE attempts > 0 AND clear_rate >= $1 AND clear_rate < $2`,
+		score := difficulty.Current.SQL("clear_rate", "attempts") // the band is decided by the difficulty score, not the raw rate
+
+		if err := p.DB.QueryRow(`SELECT COUNT(*) FROM datastore.level_sources WHERE attempts > 0 AND `+score+` >= $1 AND `+score+` < $2`,
 			b.Min, b.Max).Scan(&out[i]); err != nil {
 			return nil, err
 		}
@@ -265,7 +274,7 @@ func (p *Pool) fillTo(ctx context.Context, targets []int, maxDraws int) (Stats, 
 			continue
 		}
 
-		b := p.bandOf(lvl.ClearRate)
+		b := p.bandOfLevel(lvl)
 		if b < 0 {
 			continue
 		}

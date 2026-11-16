@@ -18,13 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/PretendoNetwork/super-mario-maker/ash0"
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
 
@@ -289,6 +289,23 @@ func AddLevelRatings(x execer) error {
 			AND NOT EXISTS (SELECT 1 FROM datastore.object_ratings r WHERE r.data_id = o.data_id AND r.slot = s.slot)`, levelRatingSlots)
 
 	return err
+}
+
+// RecomputeDifficulty rewrites the difficulty ranking value of every level that has counts in level_sources, using the
+// current difficulty prior, and returns how many values changed. The counts are the raw ones the catalog kept, so this is
+// idempotent and can run at every start: it is what brings a catalog built earlier (or with another prior) in line.
+func RecomputeDifficulty(x execer, app uint32) (int64, error) {
+	score := difficulty.Current.SQL("l.clear_rate", "l.attempts")
+	value := `(SELECT CAST(ROUND(100.0 * ` + score + `) AS INTEGER) FROM datastore.level_sources l WHERE l.data_id = object_custom_rankings.data_id)`
+
+	res, err := x.Exec(`UPDATE datastore.object_custom_rankings SET value = `+value+`
+		WHERE application_id = $1 AND data_id IN (SELECT data_id FROM datastore.level_sources WHERE attempts > 0)
+			AND value <> `+value, app)
+	if err != nil {
+		return 0, err
+	}
+
+	return res.RowsAffected()
 }
 
 // regionCountry maps the region/language code that ends the archive's Mii data (the last 4 bytes, big endian: 0 Japan,
@@ -568,7 +585,7 @@ func write(db *sql.DB, lvl upstream.Level, size int, meta []byte, fetched, ifAbs
 
 	if lvl.TotalAttempts > 0 {
 		if _, err := tx.Exec(`INSERT INTO datastore.object_custom_rankings (data_id, application_id, value) VALUES ($1, $2, $3)`,
-			id, opt.DifficultyApp, int64(math.Round(lvl.ClearRate*100))); err != nil {
+			id, opt.DifficultyApp, int64(difficulty.Current.Percent(lvl.ClearRate, float64(lvl.TotalAttempts)))); err != nil {
 			return err
 		}
 	}

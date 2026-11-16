@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" driver
+
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 )
 
 // Record is one level as the metadata dump or the metadata API describes it.
@@ -121,15 +122,15 @@ func intern(m map[string]int, s string) int {
 	return m[s]
 }
 
-// bucketOf is the clear rate in whole percent, from the counts (any stored rate in a dump is ignored).
+// bucketOf is the difficulty score in whole percent (see package difficulty: the clear rate, pulled towards the typical level
+// when there are few attempts), from the counts (any stored rate in a dump is ignored). An index must be rebuilt after the
+// prior changes.
 func bucketOf(clears, attempts int64) int {
 	if attempts <= 0 {
 		return 0
 	}
 
-	b := int(math.Round(100 * float64(clears) / float64(attempts)))
-
-	return max(0, min(100, b))
+	return max(0, min(100, difficulty.Current.PercentCounts(clears, attempts)))
 }
 
 // Add stages one record. It returns a *SkipError for records that cannot be indexed and a plain error for I/O problems.
@@ -281,7 +282,7 @@ func (b *Builder) Finish() (Stats, error) {
 
 	for k, v := range map[string]string{
 		"schema": "1", "algorithm": fmt.Sprint(AlgorithmVersion), "levels": fmt.Sprint(b.stats.Total),
-		"fingerprint": b.stats.Fingerprint, "built": time.Now().UTC().Format(time.RFC3339),
+		"fingerprint": b.stats.Fingerprint, "built": time.Now().UTC().Format(time.RFC3339), "difficulty_prior": difficulty.Current.String(),
 	} {
 		if err := exec(`INSERT INTO meta VALUES (?, ?)`, k, v); err != nil {
 			return b.stats, err

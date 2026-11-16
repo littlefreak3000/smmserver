@@ -72,6 +72,10 @@ The pace is set by politeness towards two volunteer-run services (a metadata API
 
 **The whole archive** (about 10 million levels, around 470 GB) is not something `--levels` can build: at this pace it would take months of constant requests, which the services should not be asked to handle. That needs a list of all levels, which the program can use as an *index*, and ideally a copy of the level files from the people who keep them. [whole-archive.md](whole-archive.md) explains the routes (the index, and the Archive Team's files) step by step, and [whole-archive-index.md](whole-archive-index.md) is the design behind the index. Until then the practical route is large seeded caches shared as zips.
 
+## The difficulty prior is part of a seed
+
+A cache fills the four difficulty bands evenly, and which band a level belongs to depends on how difficulty is scored ([difficulty.md](difficulty.md)). So the scoring setting (`SMM_DIFFICULTY_PRIOR`) is recorded in `cache.json` when a cache is created, `cache build` continues a cache with its own setting and refuses a different one, and a locked cache keeps its setting whatever the server's settings say. Two people who build the same seed with the same program get the same prior by default. Caches built before this existed used raw clear rates and still do.
+
 ## What can still make two copies differ
 
 - A level that the archive services serve today but not tomorrow (or the reverse) can make a build skip a level. The fingerprint shows it: if two people's fingerprints differ, compare with `cache info` and share one person's zip.

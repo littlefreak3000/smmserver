@@ -45,6 +45,7 @@ type Index struct {
 	counts      [101]int64
 	total       int64
 	fingerprint string
+	prior       string // the difficulty prior of the buckets
 	prefixes    map[int64]string
 	keypairs    map[int64]string
 }
@@ -121,6 +122,10 @@ func Open(path string) (*Index, error) {
 		return fail(err)
 	}
 
+	// * an index built before the difficulty prior existed sorted levels by their raw clear rate
+	x.prior = "off"
+	_ = db.QueryRow(`SELECT value FROM meta WHERE key = 'difficulty_prior'`).Scan(&x.prior)
+
 	if x.total == 0 {
 		return fail(errors.New("it contains no levels"))
 	}
@@ -129,6 +134,9 @@ func Open(path string) (*Index, error) {
 }
 
 func (x *Index) Close() error { return x.db.Close() }
+
+// Prior is the difficulty prior the index's buckets were made with, as a setting ("off", or "MEAN,STRENGTH").
+func (x *Index) Prior() string { return x.prior }
 
 // Total is the number of levels in the index.
 func (x *Index) Total() int64 { return x.total }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/index"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 	"github.com/klauspost/compress/zstd"
@@ -40,11 +41,23 @@ func runIndexCommand(args []string) int {
 		from := fs.String("from", "", "metadata dump (JSON Lines; .gz and .zst are decompressed)")
 		out := fs.String("out", "", "index file to write")
 		limit := fs.Int("limit", 0, "stop after this many records (0 = all; for trying a dump out)")
+		priorFlag := fs.String("prior", os.Getenv("SMM_DIFFICULTY_PRIOR"), "difficulty prior (off, or MEAN,STRENGTH; default: SMM_DIFFICULTY_PRIOR or the program's default)")
 
 		if err := fs.Parse(args[1:]); err != nil || *from == "" || *out == "" {
 			fmt.Print(indexUsage)
 			return 2
 		}
+
+		// * the buckets are difficulty scores, so the index carries the prior it was built with (see package difficulty)
+		prior, err := difficulty.Parse(*priorFlag)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+
+		difficulty.Current = prior
+
+		fmt.Printf("difficulty prior: %s (an index must be used by a server with the same SMM_DIFFICULTY_PRIOR)\n", prior.String())
 
 		if err := buildIndex(*from, *out, *limit); err != nil {
 			fmt.Fprintln(os.Stderr, "index build failed:", err)

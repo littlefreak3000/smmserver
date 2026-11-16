@@ -19,6 +19,7 @@ import (
 	"github.com/PretendoNetwork/nex-go/v2/types"
 	"github.com/PretendoNetwork/super-mario-maker/consoleproxy"
 	"github.com/PretendoNetwork/super-mario-maker/database"
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	"github.com/PretendoNetwork/super-mario-maker/homeaccount"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
@@ -343,6 +344,36 @@ func loadCacheManifest() *pool.CacheManifest {
 	return m
 }
 
+// applyDifficultyPrior sets how levels are sorted by difficulty from SMM_DIFFICULTY_PRIOR (see package difficulty and
+// docs/difficulty.md). A locked cache keeps the prior it was built with, so every copy of it sorts the levels the same way.
+// It must run before anything imports a level.
+func applyDifficultyPrior() {
+	prior, err := difficulty.Parse(getenv("SMM_DIFFICULTY_PRIOR", ""))
+	if err != nil {
+		globals.Logger.Warningf("%s; using the default %s", err.Error(), difficulty.Default.String())
+
+		prior = difficulty.Default
+	}
+
+	if m := loadCacheManifest(); m != nil && m.Locked {
+		if p, err := pool.ManifestPrior(m); err == nil {
+			if p != prior {
+				globals.Logger.Infof("Cache %s was built with the difficulty prior %s; using that and not %s, so every copy sorts levels alike", cacheLabel(m), p.String(), prior.String())
+			}
+
+			prior = p
+		}
+	}
+
+	difficulty.Current = prior
+
+	if prior.Strength == 0 {
+		globals.Logger.Info("Difficulty: levels are sorted by their raw clear rate (SMM_DIFFICULTY_PRIOR=off)")
+	} else {
+		globals.Logger.Infof("Difficulty: levels with few attempts are pulled towards a typical level (prior %s: clear rate %.0f%%, worth %g attempts; SMM_DIFFICULTY_PRIOR=off for raw clear rates)", prior.String(), prior.Mean*100, prior.Strength)
+	}
+}
+
 func cacheLabel(m *pool.CacheManifest) string {
 	if m.Seed != "" {
 		return fmt.Sprintf("%q (fingerprint %s)", m.Seed, m.Fingerprint)
@@ -481,6 +512,11 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 # Size limit for the downloaded levels, in megabytes. When they take more, the oldest levels are removed (levels you starred or
 # made are kept; the game can fetch a removed level again). 0 = no limit (the default). Only used while fetching is on.
 #SMM_CACHE_MAX_MB=0
+# How levels are sorted by difficulty. A level with few attempts has an unreliable clear rate (3 clears in 3 attempts is not
+# "100%"), so its score is pulled towards a typical level: MEAN,STRENGTH = that level's clear rate (0..1) and how many attempts'
+# worth of evidence it carries. The default 0.2,3 leaves levels with 40+ attempts within about a point of their raw rate.
+# "off" uses the raw clear rate. A locked cache keeps the prior it was built with; rebuild an index after changing this.
+#SMM_DIFFICULTY_PRIOR=0.2,3
 
 # Whole-archive index: lets every archived level come up in random lists (build one with: smm-server index build --from <levels.jsonl> --out data/index.sqlite).
 # Used automatically when data/index.sqlite exists. 0 = ignore it.

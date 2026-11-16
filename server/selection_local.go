@@ -13,6 +13,7 @@ import (
 
 	"github.com/PretendoNetwork/super-mario-maker/challenge"
 	"github.com/PretendoNetwork/super-mario-maker/database"
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	"github.com/PretendoNetwork/super-mario-maker/index"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
@@ -123,6 +124,13 @@ func startIndexMode(p *pool.Pool, x *index.Index) {
 		u := l.Upstream()
 
 		return &u, nil
+	}
+
+	// * the index's buckets are difficulty scores made with one prior; the levels downloaded for it must be scored the same way
+	if ip, err := difficulty.Parse(x.Prior()); err == nil && ip != difficulty.Current {
+		globals.Logger.Infof("The index was built with the difficulty prior %s; using that and not %s so the downloaded levels match its buckets", ip.String(), difficulty.Current.String())
+
+		difficulty.Current = ip
 	}
 
 	go p.RunPrefetch(context.Background())
@@ -260,6 +268,13 @@ func startSelection() {
 	// * levels imported earlier lack rating slot 5, without which the game shows no creator Mii
 	if err := levelimport.AddLevelRatings(database.DB); err != nil {
 		globals.Logger.Warningf("Could not complete the archive levels: %s", err.Error())
+	}
+
+	// * the difficulty values of levels imported earlier (or under another prior) follow the current prior; idempotent
+	if n, err := levelimport.RecomputeDifficulty(database.DB, 300000000); err != nil {
+		globals.Logger.Warningf("Could not update the difficulty of the archive levels: %s", err.Error())
+	} else if n > 0 {
+		globals.Logger.Infof("Difficulty: updated %d levels to the current prior", n)
 	}
 
 	nex_datastore_super_mario_maker.Selector = sel

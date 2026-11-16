@@ -72,6 +72,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_POOL_TARGET` | Levels kept ready in each of four clear-rate bands | 25 |
 | `SMM_POOL_GROW_EVERY`, `SMM_POOL_GROW_BY`, `SMM_POOL_MAX` | Slow growth of the pool (see below) | 10m, 1, 250 |
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
+| `SMM_DIFFICULTY_PRIOR` | How levels are sorted by difficulty: `off` (raw clear rate) or `MEAN,STRENGTH` | `0.2,3` |
 | `SMM_TRACE` | `1` logs every request the game makes; only for tracking down problems | off |
 | `SMM_DATA_DIR` | A different data folder | `./data` |
 
@@ -104,7 +105,7 @@ Two behaviours, both on by default:
 - **A level the game asks for by ID** that the catalog lacks is looked up, downloaded, validated and imported before the answer is sent (about 1.4 s in a live test). An ID the archive does not have answers NotFound in about 0.3 s and is remembered for 30 minutes. Levels that players uploaded to this server are never overwritten by archive levels.
 - **A pool for lists and difficulty.** The game needs candidates before it can list anything, and the API returns only one random level per call. A background task therefore samples levels and keeps `SMM_POOL_TARGET` levels in each of four clear-rate bands (0-5 %, 5-20 %, 20-50 %, 50-100 %). It downloads only what an unfilled band needs, resumes after a restart, and a full pool costs nothing. In a live test it built 200 levels (50 per band) in 6 min 15 s, with 419 draws and no invalid files or errors.
 
-**Difficulty.** Each level gets a ranking value under application ID `300000000`: its clear rate in percent. The Mario Challenge request (`ScoreRangeCascadedSearchObject`) picks random levels whose value lies in the requested range. With a live pool, the ranges 1-49, 0-5, 20-50 and 50-100 returned only levels inside the range, and a different selection each time.
+**Difficulty.** Each level gets a ranking value under application ID `300000000`: its clear rate in percent, adjusted for levels with few attempts (3 clears in 3 attempts is not "100 %"; the level's score is pulled towards a typical level, and levels with 40 or more attempts barely move). The adjustment is `SMM_DIFFICULTY_PRIOR`; [docs/difficulty.md](docs/difficulty.md) has the data behind it and what is not done. The Mario Challenge request (`ScoreRangeCascadedSearchObject`) picks random levels whose value lies in the requested range. With a live pool, the ranges 1-49, 0-5, 20-50 and 50-100 returned only levels inside the range, and a different selection each time.
 
 **Growth.** After the first fill the pool grows slowly while the server runs: every `SMM_POOL_GROW_EVERY` (`0` stops growth) each band gets `SMM_POOL_GROW_BY` more levels, until every band holds `SMM_POOL_MAX` (about 1,000 levels, 48 MB). A growth step has a small draw budget and the target follows the emptiest band, so a band the archive cannot fill right now never causes a burst of requests or lets the other bands balloon. For a one-time bigger pool, start once with a larger `SMM_POOL_TARGET`; it uses the same code path at the same request rate.
 

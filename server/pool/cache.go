@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/index"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
@@ -46,7 +47,25 @@ type CacheManifest struct {
 	Fingerprint string    `json:"fingerprint"` // of the level IDs in the folder (see CacheFingerprint)
 	Locked      bool      `json:"locked"`      // the server must not add or fetch levels (keeps the set identical everywhere)
 	PlaySeed    string    `json:"play_seed,omitempty"`
+	// Prior is the difficulty prior the bands were decided with (see package difficulty). It is part of what makes a seeded
+	// cache repeatable: another prior puts levels in other bands. A manifest without it was built with raw clear rates.
+	Prior string `json:"prior,omitempty"`
 	Built       time.Time `json:"built"`
+}
+
+// manifestPrior is the difficulty prior a cache was built with, as a setting; caches built before the prior was recorded used
+// raw clear rates.
+func manifestPrior(m *CacheManifest) string {
+	if m.Prior == "" {
+		return difficulty.Prior{}.String()
+	}
+
+	return m.Prior
+}
+
+// ManifestPrior reads the difficulty prior a cache was built with.
+func ManifestPrior(m *CacheManifest) (difficulty.Prior, error) {
+	return difficulty.Parse(manifestPrior(m))
 }
 
 // ReadManifest reads cache.json from a data folder; (nil, nil) when there is none.
@@ -173,13 +192,15 @@ func (p *Pool) BuildCache(ctx context.Context, opt BuildOptions) (*CacheManifest
 		return nil, fmt.Errorf("this data folder holds the cache of seed %q; use --seed %q to extend it, or another folder", m.Seed, m.Seed)
 	case m == nil && seeded && existing > 0 && !opt.Force:
 		return nil, fmt.Errorf("this data folder already holds %d levels, so a seeded build here would not be repeatable. Use an empty folder (SMM_DATA_DIR), or --force", existing)
+	case m != nil && manifestPrior(m) != difficulty.Current.String():
+		return nil, fmt.Errorf("this cache was built with the difficulty prior %q, not %q; build it with the same prior (the build command picks the cache's own)", manifestPrior(m), difficulty.Current.String())
 	case m != nil && m.Space != 0 && m.Space != space:
 		return nil, fmt.Errorf("the cache was built for index space %d, but this program uses %d", m.Space, space)
 	}
 
 	if m == nil {
 		words := strings.Join(strings.Fields(opt.Seed), " ")
-		m = &CacheManifest{Format: cacheFormat, Seed: words, Space: space, Locked: seeded, PlaySeed: words}
+		m = &CacheManifest{Format: cacheFormat, Seed: words, Space: space, Locked: seeded, PlaySeed: words, Prior: difficulty.Current.String()}
 	}
 
 	if len(m.Cursor) != bands {
@@ -323,7 +344,7 @@ func (p *Pool) consider(ctx context.Context, lvl *upstream.Level, counts []int, 
 		return false, nil // nothing at that index, or no win rate to sort it by
 	}
 
-	b := p.bandOf(lvl.ClearRate)
+	b := p.bandOfLevel(lvl)
 	if b < 0 || counts[b] >= perBand {
 		return false, nil
 	}

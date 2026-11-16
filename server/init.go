@@ -161,6 +161,9 @@ func init() {
 	// * Open the catalog (SQLite)
 	database.Connect(catalogPath)
 
+	// * how levels are sorted by difficulty (before anything imports a level; see difficulty.go)
+	applyDifficultyPrior()
+
 
 	// * Home/archive mode: the account service Cemu logs in to (see local.go)
 	startHomeAccount()
