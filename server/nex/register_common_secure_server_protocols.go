@@ -12,6 +12,7 @@ import (
 	secure "github.com/PretendoNetwork/nex-protocols-go/v2/secure-connection"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/coursecode"
+	"github.com/PretendoNetwork/super-mario-maker/database"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	nex_datastore_super_mario_maker "github.com/PretendoNetwork/super-mario-maker/nex/datastore/super-mario-maker"
 )
@@ -62,6 +63,11 @@ func registerCommonSecureProtocols() {
 	commonDataStoreProtocol.GetObjectInfoByDataID = datastore_db.GetObjectInfoByDataID
 	commonDataStoreProtocol.GetObjectInfoByPersistenceTargetWithPassword = datastore_db.GetObjectInfoByPersistenceTargetWithPassword
 	commonDataStoreProtocol.GetObjectInfoByDataIDWithPassword = func(dataID, password types.UInt64) (datastore_types.DataStoreMetaInfo, *nex.Error) {
+		// * the event course list may have been replaced while the server runs: the game asks about it first, then downloads it
+		if dataID == 900000 {
+			database.RefreshEventCourseList()
+		}
+
 		// * PrepareGetObject / GetMeta of a level that is only listed so far (whole-archive index): download it first
 		if nex_datastore_super_mario_maker.EnsureFetched != nil {
 			nex_datastore_super_mario_maker.EnsureFetched(uint64(dataID))

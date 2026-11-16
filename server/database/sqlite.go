@@ -164,11 +164,14 @@ func ensureEventCourseMetaDataFileExists() {
 	bucket := os.Getenv("PN_SMM_CONFIG_S3_BUCKET")
 	key := "900000.bin"
 
-	objectSizeS3, err := globals.S3ObjectSize(bucket, key)
+	eventInfo, err := globals.S3StatObject(bucket, key)
+	objectSizeS3 := uint64(eventInfo.Size)
 	if err != nil {
 		globals.Logger.Errorf("Failed to stat event course metadata file 900000.bin. Make sure it exists in the course data directory. S3 error: %s", err.Error())
 		os.Exit(1)
 	}
+
+	rememberEventCourseFile(eventInfo) // the version the catalog is about to be made to match (see eventwatch.go)
 
 	globals.Logger.Success("Event course metadata file found. Verifying database")
 

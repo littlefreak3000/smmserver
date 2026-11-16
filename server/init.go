@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PretendoNetwork/plogger-go"
 	"github.com/PretendoNetwork/super-mario-maker/database"
@@ -162,8 +161,6 @@ func init() {
 	// * Open the catalog (SQLite)
 	database.Connect(catalogPath)
 
-	// * the event course list (900000.bin) can be replaced while the server runs (smm-server events build)
-	database.WatchEventCourseFile(2 * time.Second)
 
 	// * Home/archive mode: the account service Cemu logs in to (see local.go)
 	startHomeAccount()
