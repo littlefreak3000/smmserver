@@ -41,6 +41,17 @@ All numbers are big-endian. All text is UTF-16BE, NUL-terminated inside a fixed-
 
 **What was checked.** `go test ./events` writes a list back from the parsed original and compares every byte that has meaning (it ignores only the leftovers), for all 46 records, and checks that the reading and writing code are inverses on synthetic lists. Point `SMM_EVENT_LIST` at a copy of the archived 900000 file to run the original-file test; it is skipped otherwise.
 
+## Course IDs: what the game shows and what the server sees
+
+The game shows a course by a code such as `9007-0000-00BB-FD3B`; the servers (and the log) use a **data ID**, here `12320059`. They are the same number in two forms: the last eight hex digits of the code are the data ID, the second group is `0000`, and the first group is a checksum. The checksum is the HMAC-MD5 of the data ID as 8 little-endian bytes, keyed with the MD5 of the text `9f2b4678` (the game's access key), taking bytes 3 and 2 of the result as the group. The scheme comes from the Pretendo wiki ("datastore codes"); it matched two real codes, the wiki's example and one shown by the game for a level the server served as data ID 12320059 (Cemu).
+
+```
+smm-server code 9007-0000-00BB-FD3B     # -> data ID 12320059
+smm-server code 12320059                # -> 9007-0000-00BB-FD3B
+```
+
+With `SMM_TRACE=1` the log shows both forms for levels (`GetMeta/PrepareGet by data id 12320059 (course ID 9007-0000-00BB-FD3B)`), so a level seen in the game can be found in the log and the other way round. A level can be looked up in the game by typing its code, and the game turns it into the data ID itself. The 46 original event courses have the data IDs 930000 to 930050 (for example 930050 is `FF52-0000-000E-3102`).
+
 ## Making your own
 
 ```
@@ -53,7 +64,7 @@ Each event in `events.json`:
 
 | Key | Meaning |
 |---|---|
-| `id` | data ID of the course the event opens (must exist in the catalog) |
+| `id` | the course the event opens (must exist in the catalog): a data ID (`12320059`) or the course ID the game shows (`"9007-0000-00BB-FD3B"`) |
 | `title`, `description` | the text for every language; titles hold at most 32 characters and descriptions at most 370 |
 | `titles`, `descriptions` | per language (`ja`, `en-US`, `fr-US`, `es-US`, `en-EU`, `fr-EU`, `es-EU`, `de`, `it`, `nl`, `ru`, `pt`); these win over the general text |
 | `start`, `end` | `2026-10-25` or `2026-10-25T18:00:00Z`; the end defaults to a hundred years after the start |

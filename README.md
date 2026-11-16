@@ -147,7 +147,7 @@ Players on different servers get the same levels only if their **challenge codes
 
 ## Event courses
 
-The game's **event courses** menu is built from one file on the data store, data ID 900000. Its format is decoded (a title and a description in 12 languages, a banner pack name, a start and an end date per event), and the Internet Archive holds the original list and its 46 courses. `smm-server events build events.json` writes a list of your own, and `smm-server events dump FILE` reads one. A custom list has **not been tried in the game yet**; see [docs/event-courses.md](docs/event-courses.md) for the layout and what is untested.
+The game's **event courses** menu is built from one file on the data store, data ID 900000. Its format is decoded (a title and a description in 12 languages, a banner pack name, a start and an end date per event), and the Internet Archive holds the original list and its 46 courses. `smm-server events build events.json` writes a list of your own, and `smm-server events dump FILE` reads one. `smm-server code` converts between the course ID the game shows (`9007-0000-00BB-FD3B`) and the data ID in the server's log (`12320059`). A custom list has **not been tried in the game yet**; see [docs/event-courses.md](docs/event-courses.md) for the layout and what is untested.
 
 ## Building and tests
 

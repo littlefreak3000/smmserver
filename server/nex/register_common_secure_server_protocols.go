@@ -11,6 +11,7 @@ import (
 	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	secure "github.com/PretendoNetwork/nex-protocols-go/v2/secure-connection"
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
+	"github.com/PretendoNetwork/super-mario-maker/coursecode"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	nex_datastore_super_mario_maker "github.com/PretendoNetwork/super-mario-maker/nex/datastore/super-mario-maker"
 )
@@ -70,7 +71,11 @@ func registerCommonSecureProtocols() {
 		if e != nil {
 			globals.Tracef("GetMeta/PrepareGet by data id %d: %s", dataID, e.Message)
 		} else {
-			globals.Tracef("GetMeta/PrepareGet by data id %d: owner %d type %d", dataID, meta.OwnerID, meta.DataType)
+			if meta.DataType > 2 && meta.DataType < 50 { // a level: also show the course ID the game displays for it
+				globals.Tracef("GetMeta/PrepareGet by data id %d (course ID %s): owner %d type %d", dataID, coursecode.Format(uint32(dataID)), meta.OwnerID, meta.DataType)
+			} else {
+				globals.Tracef("GetMeta/PrepareGet by data id %d: owner %d type %d", dataID, meta.OwnerID, meta.DataType)
+			}
 
 			// * a level the game opens counts as played: random lists offer other levels first from now on
 			if nex_datastore_super_mario_maker.Played != nil && meta.DataType > 2 && meta.DataType < 50 {

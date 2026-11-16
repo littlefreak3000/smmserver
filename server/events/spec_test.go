@@ -39,6 +39,21 @@ func TestTheExampleBuilds(t *testing.T) {
 	}
 }
 
+func TestACourseCanBeADataIDOrTheCodeTheGameShows(t *testing.T) {
+	for _, id := range []string{`12320059`, `"12320059"`, `"9007-0000-00BB-FD3B"`, `"9007000000bbfd3b"`} {
+		list, err := FromJSON([]byte(`{"events":[{"id":` + id + `,"title":"x","start":"2026-01-01"}]}`))
+		if err != nil || list[0].ID != 12320059 {
+			t.Errorf("id %s: %v, %+v", id, err, list)
+		}
+	}
+
+	for _, id := range []string{`"9008-0000-00BB-FD3B"`, `"hello"`, `0`, `-5`} {
+		if _, err := FromJSON([]byte(`{"events":[{"id":` + id + `,"title":"x","start":"2026-01-01"}]}`)); err == nil {
+			t.Errorf("id %s was accepted", id)
+		}
+	}
+}
+
 func TestBadSpecsAreRefused(t *testing.T) {
 	for name, in := range map[string]string{
 		"no events":         `{"events":[]}`,

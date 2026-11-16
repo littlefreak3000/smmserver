@@ -29,6 +29,10 @@ func init() {
 		os.Exit(runCacheCommand(os.Args[2:]))
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "code" {
+		os.Exit(runCodeCommand(os.Args[2:]))
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "events" {
 		os.Exit(runEventsCommand(os.Args[2:]))
 	}

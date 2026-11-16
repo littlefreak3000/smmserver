@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/PretendoNetwork/super-mario-maker/coursecode"
 )
 
 // Example is a small events.json that FromJSON accepts.
@@ -33,8 +36,32 @@ type spec struct {
 	Events []specEvent `json:"events"`
 }
 
+// courseRef is a course in events.json: a data ID (12320059, or "12320059") or the course ID the game shows
+// ("9007-0000-00BB-FD3B").
+type courseRef int64
+
+func (c *courseRef) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	s = strings.Trim(s, `"`)
+
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 && len(s) < 16 {
+		*c = courseRef(n)
+
+		return nil
+	}
+
+	id, err := coursecode.Parse(s)
+	if err != nil {
+		return fmt.Errorf("a course is a data ID or a course ID like 9007-0000-00BB-FD3B: %w", err)
+	}
+
+	*c = courseRef(id)
+
+	return nil
+}
+
 type specEvent struct {
-	ID           int64             `json:"id"`
+	ID           courseRef         `json:"id"`
 	Title        string            `json:"title"`        // used for every language without an entry in titles
 	Description  string            `json:"description"`  // the same for descriptions
 	Titles       map[string]string `json:"titles"`       // by language code (see Languages)
@@ -68,7 +95,7 @@ func FromJSON(raw []byte) ([]Event, error) {
 	out := make([]Event, 0, len(f.Events))
 
 	for n, j := range f.Events {
-		e := Event{ID: j.ID, Pack: j.Pack, Flag: 1}
+		e := Event{ID: int64(j.ID), Pack: j.Pack, Flag: 1}
 
 		if j.Flag != nil {
 			e.Flag = byte(*j.Flag)
