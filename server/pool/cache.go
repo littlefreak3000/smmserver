@@ -36,21 +36,21 @@ const (
 
 // CacheManifest is what `cache.json` in the data folder says about the cache.
 type CacheManifest struct {
-	Format      int       `json:"format"`
-	Seed        string    `json:"seed,omitempty"`      // "" = a random cache, not repeatable
-	Space       int       `json:"space,omitempty"`     // the random-index space the draws were taken from
-	Wanted      int       `json:"wanted"`              // levels asked for (a multiple of the number of bands)
-	NextDraw    int       `json:"next_draw,omitempty"` // seeded builds: the number of the next draw nobody looked at yet
-	Cursor      []int     `json:"cursor,omitempty"`    // seeded builds, per band: the first draw that band has not settled yet
-	PerBand     []int     `json:"per_band"`
-	Levels      int       `json:"levels"`
-	Fingerprint string    `json:"fingerprint"` // of the level IDs in the folder (see CacheFingerprint)
-	Locked      bool      `json:"locked"`      // the server must not add or fetch levels (keeps the set identical everywhere)
-	PlaySeed    string    `json:"play_seed,omitempty"`
+	Format      int    `json:"format"`
+	Seed        string `json:"seed,omitempty"`      // "" = a random cache, not repeatable
+	Space       int    `json:"space,omitempty"`     // the random-index space the draws were taken from
+	Wanted      int    `json:"wanted"`              // levels asked for (a multiple of the number of bands)
+	NextDraw    int    `json:"next_draw,omitempty"` // seeded builds: the number of the next draw nobody looked at yet
+	Cursor      []int  `json:"cursor,omitempty"`    // seeded builds, per band: the first draw that band has not settled yet
+	PerBand     []int  `json:"per_band"`
+	Levels      int    `json:"levels"`
+	Fingerprint string `json:"fingerprint"` // of the level IDs in the folder (see CacheFingerprint)
+	Locked      bool   `json:"locked"`      // the server must not add or fetch levels (keeps the set identical everywhere)
+	PlaySeed    string `json:"play_seed,omitempty"`
 	// Prior is the difficulty prior the bands were decided with (see package difficulty). It is part of what makes a seeded
 	// cache repeatable: another prior puts levels in other bands. A manifest without it was built with raw clear rates.
-	Prior string `json:"prior,omitempty"`
-	Built       time.Time `json:"built"`
+	Prior string    `json:"prior,omitempty"`
+	Built time.Time `json:"built"`
 }
 
 // manifestPrior is the difficulty prior a cache was built with, as a setting; caches built before the prior was recorded used
