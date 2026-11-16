@@ -71,7 +71,7 @@ Each event in `events.json`:
 | `start`, `end` | `2026-10-25` or `2026-10-25T18:00:00Z`; the end defaults to a hundred years after the start |
 | `pack` | optional banner pack name |
 
-A text that does not fit is an error, never cut off. Restart the server after building so the game downloads the new file. Note that the server sets the update time of object 900000 to the current time at every start; the game compares that time with the one in its save data to decide whether to show the "new event courses" notice, so the notice appears after each server restart.
+A text that does not fit is an error, never cut off. **No restart is needed:** the server checks `courses/900000.bin` every two seconds, and when the file is replaced it updates the object's size and update time and logs "Event course list changed". The game then fetches the new list the next time it opens Course World. (A server older than this feature reads the size only at start-up, so it needs a restart unless the new file has exactly the same size.) The game compares the update time with the one in its save data to decide whether to show the "new event courses" notice; the server also sets it at every start.
 
 **The courses an event opens** must be objects in the catalog. In the Cemu test the 46 originals were imported with data type 51. It is not known whether an ordinary archive level (data type 3) works there, or whether the type matters; that is the first thing to try with a custom list.
 

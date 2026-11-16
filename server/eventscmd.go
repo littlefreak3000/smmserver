@@ -20,8 +20,9 @@ const eventsUsage = `Usage:
 The game builds its "event courses" menu from the file served as data ID 900000 (see docs/event-courses.md). "build" makes
 one from a JSON file. Courses are written the way the game shows them (9007-0000-00BB-FD3B): "course" for one course or
 "courses" for a list, which becomes one menu entry per course. Each event has a title and a description (for every language,
-or per language), a start date, an optional end date and an optional banner pack. Close the server first and restart it
-afterwards. The courses must exist in the catalog. SMM_DATA_DIR chooses the data folder (default ./data).
+or per language), a start date, an optional end date and an optional banner pack. A running server notices the new file
+within a couple of seconds, so it need not be restarted. The courses must exist in the catalog. SMM_DATA_DIR chooses the
+data folder (default ./data).
 `
 
 // runEventsCommand implements "smm-server events ...". It returns the process exit code.
@@ -145,7 +146,7 @@ func eventsBuild(args []string) int {
 		fmt.Printf("  %s  %s\n", coursecode.Format(uint32(e.ID)), e.Title[1])
 	}
 
-	fmt.Printf("wrote %s: %d menu entries, %d bytes. Restart the server so the game fetches it.\n", *out, len(list), len(b))
+	fmt.Printf("wrote %s: %d menu entries, %d bytes. A running server picks it up within a couple of seconds; the game fetches it when it next opens Course World.\n", *out, len(list), len(b))
 
 	return 0
 }
