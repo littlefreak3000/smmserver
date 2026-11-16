@@ -11,11 +11,11 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/coursecode"
 )
 
-// Example is a small events.json that FromJSON accepts.
+// Example is a small events.json that FromJSON accepts. Courses are written the way the game shows them.
 const Example = `{
   "events": [
     {
-      "id": 930100,
+      "course": "9007-0000-00BB-FD3B",
       "title": "Haunted Castle",
       "description": "A spooky course for the Halloween week.\r\nGood luck!",
       "titles": { "ja": "おばけやしき" },
@@ -23,7 +23,7 @@ const Example = `{
       "end": "2026-11-02"
     },
     {
-      "id": 930101,
+      "courses": ["77A9-0000-003D-1D4F", "AC6F-0000-0064-262C"],
       "title": "Winter Wonderland",
       "description": "Snow, ice and presents.",
       "start": "2026-12-20"
@@ -36,8 +36,7 @@ type spec struct {
 	Events []specEvent `json:"events"`
 }
 
-// courseRef is a course in events.json: a data ID (12320059, or "12320059") or the course ID the game shows
-// ("9007-0000-00BB-FD3B").
+// courseRef is a course in events.json: the course ID the game shows ("9007-0000-00BB-FD3B"), or a data ID (12320059).
 type courseRef int64
 
 func (c *courseRef) UnmarshalJSON(b []byte) error {
@@ -61,7 +60,8 @@ func (c *courseRef) UnmarshalJSON(b []byte) error {
 }
 
 type specEvent struct {
-	ID           courseRef         `json:"id"`
+	Course       courseRef         `json:"course"`       // the course the event opens, as the game shows it
+	Courses      []courseRef       `json:"courses"`      // several courses: one menu entry each, titled "title 1/3", "title 2/3", ...
 	Title        string            `json:"title"`        // used for every language without an entry in titles
 	Description  string            `json:"description"`  // the same for descriptions
 	Titles       map[string]string `json:"titles"`       // by language code (see Languages)
@@ -94,15 +94,31 @@ func FromJSON(raw []byte) ([]Event, error) {
 
 	out := make([]Event, 0, len(f.Events))
 
-	for n, j := range f.Events {
-		e := Event{ID: int64(j.ID), Pack: j.Pack, Flag: 1}
+	seen := map[int64]bool{}
 
-		if j.Flag != nil {
-			e.Flag = byte(*j.Flag)
+	for n, j := range f.Events {
+		ids := make([]int64, 0, 1+len(j.Courses))
+
+		if j.Course != 0 {
+			ids = append(ids, int64(j.Course))
 		}
 
-		for k := range e.Title {
-			e.Title[k], e.Description[k] = j.Title, j.Description
+		for _, c := range j.Courses {
+			ids = append(ids, int64(c))
+		}
+
+		if (j.Course != 0) == (len(j.Courses) != 0) {
+			return nil, fmt.Errorf("event %d: give either \"course\" (one course) or \"courses\" (a list)", n+1)
+		}
+
+		base := Event{Pack: j.Pack, Flag: 1}
+
+		if j.Flag != nil {
+			base.Flag = byte(*j.Flag)
+		}
+
+		for k := range base.Title {
+			base.Title[k], base.Description[k] = j.Title, j.Description
 		}
 
 		for code, s := range j.Titles {
@@ -111,7 +127,7 @@ func FromJSON(raw []byte) ([]Event, error) {
 				return nil, fmt.Errorf("event %d: %q is not a language (use %s)", n+1, code, strings.Join(Languages[:], ", "))
 			}
 
-			e.Title[k] = s
+			base.Title[k] = s
 		}
 
 		for code, s := range j.Descriptions {
@@ -120,22 +136,42 @@ func FromJSON(raw []byte) ([]Event, error) {
 				return nil, fmt.Errorf("event %d: %q is not a language (use %s)", n+1, code, strings.Join(Languages[:], ", "))
 			}
 
-			e.Description[k] = s
+			base.Description[k] = s
 		}
 
 		var err error
 
-		if e.Start, err = parseDate(j.Start); err != nil {
+		if base.Start, err = parseDate(j.Start); err != nil {
 			return nil, fmt.Errorf("event %d: start: %w", n+1, err)
 		}
 
 		if j.End == "" {
-			e.End = e.Start.AddDate(100, 0, 0)
-		} else if e.End, err = parseDate(j.End); err != nil {
+			base.End = base.Start.AddDate(100, 0, 0)
+		} else if base.End, err = parseDate(j.End); err != nil {
 			return nil, fmt.Errorf("event %d: end: %w", n+1, err)
 		}
 
-		out = append(out, e)
+		// * the menu opens one course per entry, so a list becomes one entry per course
+		for i, id := range ids {
+			if seen[id] {
+				return nil, fmt.Errorf("event %d: course %s is listed twice", n+1, coursecode.Format(uint32(id)))
+			}
+
+			seen[id] = true
+
+			e := base
+			e.ID = id
+
+			if len(ids) > 1 {
+				for k := range e.Title {
+					if e.Title[k] != "" {
+						e.Title[k] = fmt.Sprintf("%s %d/%d", e.Title[k], i+1, len(ids))
+					}
+				}
+			}
+
+			out = append(out, e)
+		}
 	}
 
 	return out, nil

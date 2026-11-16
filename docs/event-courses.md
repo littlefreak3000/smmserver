@@ -64,8 +64,9 @@ Each event in `events.json`:
 
 | Key | Meaning |
 |---|---|
-| `id` | the course the event opens (must exist in the catalog): a data ID (`12320059`) or the course ID the game shows (`"9007-0000-00BB-FD3B"`) |
-| `title`, `description` | the text for every language; titles hold at most 32 characters and descriptions at most 370 |
+| `course` | the course the event opens, written as the game shows it: `"9007-0000-00BB-FD3B"` (a data ID such as `12320059` is accepted too). It must exist in the catalog. |
+| `courses` | a list of courses instead of one. The menu opens one course per entry, so the list becomes one entry per course, titled `title 1/3`, `title 2/3`, and so on. Give either `course` or `courses`. A course may appear only once in the file. |
+| `title`, `description` | the text for every language; titles hold at most 32 characters (with the ` 1/3` numbering included for a list) and descriptions at most 370 |
 | `titles`, `descriptions` | per language (`ja`, `en-US`, `fr-US`, `es-US`, `en-EU`, `fr-EU`, `es-EU`, `de`, `it`, `nl`, `ru`, `pt`); these win over the general text |
 | `start`, `end` | `2026-10-25` or `2026-10-25T18:00:00Z`; the end defaults to a hundred years after the start |
 | `pack` | optional banner pack name |

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/PretendoNetwork/super-mario-maker/coursecode"
 	"github.com/PretendoNetwork/super-mario-maker/events"
 )
 
@@ -17,9 +18,10 @@ const eventsUsage = `Usage:
                                                 write an event course list; default FILE is <data folder>/courses/900000.bin
 
 The game builds its "event courses" menu from the file served as data ID 900000 (see docs/event-courses.md). "build" makes
-one from a JSON file: each event names the data ID of the course it opens, a title and a description (for every language, or
-per language), a start date, an optional end date and an optional banner pack. Close the server first and restart it
-afterwards. The courses the events open must exist in the catalog. SMM_DATA_DIR chooses the data folder (default ./data).
+one from a JSON file. Courses are written the way the game shows them (9007-0000-00BB-FD3B): "course" for one course or
+"courses" for a list, which becomes one menu entry per course. Each event has a title and a description (for every language,
+or per language), a start date, an optional end date and an optional banner pack. Close the server first and restart it
+afterwards. The courses must exist in the catalog. SMM_DATA_DIR chooses the data folder (default ./data).
 `
 
 // runEventsCommand implements "smm-server events ...". It returns the process exit code.
@@ -70,7 +72,7 @@ func eventsDump(path string) int {
 	fmt.Printf("%d events\n", len(list))
 
 	for _, e := range list {
-		fmt.Printf("%d  %s .. %s  pack %-14q  %s / %s\n", e.ID, e.Start.Format("2006-01-02 15:04"), e.End.Format("2006-01-02 15:04"), e.Pack, e.Title[1], e.Title[0])
+		fmt.Printf("%s  %s .. %s  pack %-14q  %s / %s\n", coursecode.Format(uint32(e.ID)), e.Start.Format("2006-01-02 15:04"), e.End.Format("2006-01-02 15:04"), e.Pack, e.Title[1], e.Title[0])
 	}
 
 	return 0
@@ -139,7 +141,11 @@ func eventsBuild(args []string) int {
 		return 1
 	}
 
-	fmt.Printf("wrote %s: %d events, %d bytes. Restart the server so the game fetches it.\n", *out, len(list), len(b))
+	for _, e := range list {
+		fmt.Printf("  %s  %s\n", coursecode.Format(uint32(e.ID)), e.Title[1])
+	}
+
+	fmt.Printf("wrote %s: %d menu entries, %d bytes. Restart the server so the game fetches it.\n", *out, len(list), len(b))
 
 	return 0
 }
