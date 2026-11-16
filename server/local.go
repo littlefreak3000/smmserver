@@ -580,6 +580,7 @@ Stop it with Ctrl+C (this saves the catalog).
 Challenge seeds (everyone gets the same "random" levels): open http://<this PC>:8080/seed
 Account helper:   smm-server account <name | path/to/account.dat>   (the game's player ID must match what this server assigns)
 Level cache:      smm-server cache build --levels N [--seed WORDS] (same seed = same levels everywhere; see docs/cache.md)
+Event courses:    smm-server events build events.json (make the game's event menu list; see docs/event-courses.md)
 Whole-archive index: smm-server index build --from <levels.jsonl[.gz|.zst]> --out data/index.sqlite, then restart (see README)
 
 Environment variables override settings.env; SMM_DATA_DIR chooses a different data folder.

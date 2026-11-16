@@ -20,6 +20,7 @@ Guides:
 - [How archived levels work](#how-archived-levels-work)
 - [Caches: the same levels on every computer](#caches-the-same-levels-on-every-computer)
 - [The whole archive and challenge seeds](#the-whole-archive-and-challenge-seeds)
+- [Event courses](#event-courses)
 - [Building and tests](#building-and-tests)
 - [Status and known limits](#status-and-known-limits)
 - [Security](#security)
@@ -143,6 +144,10 @@ For the steps to get the data, and what is and is not possible with all 10 milli
 **Challenge seeds.** With a seed set, the "random" levels of a list are a fixed function of the seed and of the list that was asked for (the difficulty range), so players who use the same seed get the same levels in the same order. Open `http://<server address>:8080/seed`, type a seed or let it pick one, and apply it to everyone or to one player. A player's own seed wins over the shared one; clearing the seeds makes levels random again. Spelling, case and extra spaces do not matter. The game has no seed field, so seeds are set on the server, and the page has no password.
 
 Players on different servers get the same levels only if their **challenge codes** match (the seed plus the index fingerprint, shown on the page). Without an index, seeds still work but pick from whatever levels each server has downloaded, so they match only on servers with identical level sets. Seeded draws are pinned by a known-answer test, so a seed keeps its meaning across releases; a changed algorithm has to bump the version in the code, which changes every code.
+
+## Event courses
+
+The game's **event courses** menu is built from one file on the data store, data ID 900000. Its format is decoded (a title and a description in 12 languages, a banner pack name, a start and an end date per event), and the Internet Archive holds the original list and its 46 courses. `smm-server events build events.json` writes a list of your own, and `smm-server events dump FILE` reads one. A custom list has **not been tried in the game yet**; see [docs/event-courses.md](docs/event-courses.md) for the layout and what is untested.
 
 ## Building and tests
 
