@@ -29,7 +29,7 @@ Guides:
 
 ## Quick start
 
-1. Get the program: build it (see [Building and tests](#building-and-tests)) or use a release zip for your platform if one is published. Unzip it anywhere and start `smm-server` (double-click on Windows; `chmod +x` first on Linux and macOS).
+1. Get the program: build it (see [Building and tests](#building-and-tests)) or download the zip for your platform from the [latest release](https://github.com/littlefreak3000/smmserver/releases/latest) (no Go needed). Unzip it anywhere and start `smm-server` (double-click on Windows; `chmod +x` first on Linux and macOS).
    - Windows shows a SmartScreen warning because the program is not code-signed: choose "More info", then "Run anyway".
    - Windows Firewall asks for permission: allow **Private networks**, or the console cannot connect.
 2. Leave the window open. It prints a box with this computer's address. The first start downloads about 100 levels in the background (roughly five minutes) and more arrive slowly while it runs. It creates a `data` folder next to the program with its own keys, a commented `settings.env` and the level archive.
