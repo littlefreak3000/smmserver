@@ -1,6 +1,6 @@
 # Playing on a modded Wii U with the home server
 
-> **Status: not tested on a console.** The Cemu setup (see [setup-cemu.md](setup-cemu.md)) is verified. This guide is built from how the Pretendo project's own self-hosting guide connects a console, from Inkay's source code, and from what the server does when it is tested against a stand-in client. Expect to need small fixes on a first real run. The guide says where to look when something fails, and the server logs what the console asks for.
+> **Status: tried on one console, partly working.** Login, course lists and downloads work, and an Easy 100 Mario Challenge was played. A Normal one can show a "downloading additional data" popup and fail with error 104-1970 (a SpotPass download the server does not provide); the cause is not found yet. The Cemu setup (see [setup-cemu.md](setup-cemu.md)) is verified. This guide is built from how the Pretendo project's own self-hosting guide connects a console, from Inkay's source code, and from what the server does when it is tested against a stand-in client. Expect to need small fixes on a first real run. The guide says where to look when something fails, and the server logs what the console asks for.
 
 ## How it works
 

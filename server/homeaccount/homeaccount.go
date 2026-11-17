@@ -19,7 +19,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -30,6 +29,7 @@ import (
 	"hash/crc32"
 	"hash/fnv"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -113,6 +113,8 @@ func New(cfg Config) *Service {
 	s.mux.HandleFunc("GET /v1/api/provider/nex_token/@me", s.nexToken)
 	s.mux.HandleFunc("GET /v1/api/provider/service_token/@me", s.serviceToken)
 	s.mux.HandleFunc("GET /v1/api/admin/mapped_ids", s.mappedIDs)
+	s.mux.HandleFunc("GET /v1/api/admin/time", s.serverTime)
+	s.mux.HandleFunc("GET /v1/api/people/@me/profile", s.profile)
 
 	return s
 }
@@ -158,49 +160,101 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeXML(w, status, fmt.Sprintf(`<errors><error><code>%s</code><message>%s</message></error></errors>`, code, esc(msg)))
 }
 
+// writeInvalidToken is the real account server's answer to a missing, expired or unknown access token: 0005 with the cause
+// access_token. A console that gets it logs in again instead of giving up (0002 means "bad format" and ends in 102-2402).
+func writeInvalidToken(w http.ResponseWriter) {
+	writeXML(w, 400, `<errors><error><cause>access_token</cause><code>0005</code><message>Invalid access token</message></error></errors>`)
+}
+
 func (s *Service) sign(parts ...string) string {
 	mac := hmac.New(sha256.New, s.cfg.Secret)
 	mac.Write([]byte(strings.Join(parts, "|")))
 	return hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
-// accessToken is stateless: v1.<base64url nnid>.<expires unix>.<hmac>, so restarts do not log anyone out.
-func (s *Service) accessToken(kind, nnid string, lifetime time.Duration) string {
-	exp := strconv.FormatInt(s.cfg.Now().Add(lifetime).Unix(), 10)
-	n := base64.RawURLEncoding.EncodeToString([]byte(nnid))
+// tokenLen is the length of every token this service hands out. A Wii U keeps an access token in a buffer of 32 bytes
+// and sends back only that much (a longer token came back cut off, and was refused), so a token is exactly 32 characters.
+const tokenLen = 32
 
-	return strings.Join([]string{"v1", n, exp, s.sign(kind, n, exp)}, ".")
+// accessToken is stateless, so restarts do not log anyone out: 32 hex characters, which are the account's row number
+// (4 bytes; unlike the player ID it never changes when an imported creator's ID is claimed), the expiry in unix seconds
+// (4 bytes) and the first 8 bytes of an HMAC over the kind, row and expiry (a refresh token is not an access token).
+func (s *Service) accessToken(kind, nnid string, lifetime time.Duration) string {
+	var row uint32
+	if err := s.cfg.DB.QueryRow(`SELECT rowid FROM datastore.accounts WHERE nnid = $1`, nnid).Scan(&row); err != nil {
+		s.cfg.Logf("account: no row for %q: %v", nnid, err)
+	}
+
+	var b [16]byte
+
+	binary.BigEndian.PutUint32(b[0:], row)
+	binary.BigEndian.PutUint32(b[4:], uint32(s.cfg.Now().Add(lifetime).Unix()))
+
+	mac := hmac.New(sha256.New, s.cfg.Secret)
+	mac.Write([]byte(kind))
+	mac.Write(b[:8])
+	copy(b[8:], mac.Sum(nil))
+
+	return hex.EncodeToString(b[:])
 }
 
 func (s *Service) verifyToken(kind, token string) (string, bool) {
-	p := strings.Split(token, ".")
-	if len(p) != 4 || p[0] != "v1" {
+	raw, err := hex.DecodeString(token)
+	if err != nil || len(token) != tokenLen {
 		return "", false
 	}
 
-	if !hmac.Equal([]byte(p[3]), []byte(s.sign(kind, p[1], p[2]))) {
+	mac := hmac.New(sha256.New, s.cfg.Secret)
+	mac.Write([]byte(kind))
+	mac.Write(raw[:8])
+
+	if !hmac.Equal(raw[8:], mac.Sum(nil)[:8]) {
 		return "", false
 	}
 
-	if exp, err := strconv.ParseInt(p[2], 10, 64); err != nil || s.cfg.Now().Unix() >= exp {
+	if s.cfg.Now().Unix() >= int64(binary.BigEndian.Uint32(raw[4:])) {
 		return "", false
 	}
 
-	nnid, err := base64.RawURLEncoding.DecodeString(p[1])
-	if err != nil {
+	var nnid string
+	if err := s.cfg.DB.QueryRow(`SELECT nnid FROM datastore.accounts WHERE rowid = $1`, binary.BigEndian.Uint32(raw[:4])).Scan(&nnid); err != nil {
 		return "", false
 	}
 
-	return string(nnid), true
+	return nnid, true
 }
 
 func (s *Service) bearer(r *http.Request) (string, bool) {
 	h := r.Header.Get("Authorization")
 	if len(h) < 8 || !strings.EqualFold(h[:7], "bearer ") {
+		s.rejected(r, h, "no bearer token")
 		return "", false
 	}
 
-	return s.verifyToken("access", strings.TrimSpace(h[7:]))
+	nnid, ok := s.verifyToken("access", strings.TrimSpace(h[7:]))
+	if !ok {
+		s.rejected(r, h, "token did not verify")
+	}
+
+	return nnid, ok
+}
+
+// rejected logs why an access token was refused: the header names the client sent and the shape of the
+// Authorization value (scheme and lengths only, never the token), which is what is needed to see what a
+// console really sends.
+func (s *Service) rejected(r *http.Request, auth, why string) {
+	names := make([]string, 0, len(r.Header))
+	for k := range r.Header {
+		names = append(names, k)
+	}
+
+	sort.Strings(names)
+
+	scheme, token, _ := strings.Cut(auth, " ")
+	token = strings.TrimSpace(token)
+
+	s.cfg.Logf("account: %s: %s: Authorization scheme %q, value %d bytes (%d dot-separated parts); headers %v",
+		r.URL.Path, why, scheme, len(token), strings.Count(token, ".")+1, names)
 }
 
 func validNNID(n string) bool {
@@ -299,7 +353,10 @@ func (s *Service) oauth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.PIDFor(nnid); err != nil { // register now so mapped_ids and nex_token agree
+	pid, err := s.PIDFor(nnid) // register now so mapped_ids and nex_token agree
+	s.cfg.Logf("account: login as %q (PID %d, %s)", nnid, pid, r.PostForm.Get("grant_type"))
+
+	if err != nil {
 		s.cfg.Logf("account: %v", err)
 		writeError(w, 500, "0008", "Internal error")
 		return
@@ -313,7 +370,7 @@ func (s *Service) oauth(w http.ResponseWriter, r *http.Request) {
 func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	nnid, ok := s.bearer(r)
 	if !ok {
-		writeError(w, 400, "0002", "Invalid access token")
+		writeInvalidToken(w)
 		return
 	}
 
@@ -356,7 +413,7 @@ func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 func (s *Service) serviceToken(w http.ResponseWriter, r *http.Request) {
 	nnid, ok := s.bearer(r)
 	if !ok {
-		writeError(w, 400, "0002", "Invalid access token")
+		writeInvalidToken(w)
 		return
 	}
 
@@ -367,15 +424,62 @@ func (s *Service) serviceToken(w http.ResponseWriter, r *http.Request) {
 
 	// * There are no independent services (Dothub etc.) behind this; hand out an opaque token so a client
 	// * that insists on having one does not abort.
-	var nonce [8]byte
-	rand.Read(nonce[:])
-	writeXML(w, 200, fmt.Sprintf(`<service_token><token>%s</token></service_token>`,
-		s.accessToken("service", nnid, 24*time.Hour)+"."+hex.EncodeToString(nonce[:])))
+	writeXML(w, 200, fmt.Sprintf(`<service_token><token>%s</token></service_token>`, s.accessToken("service", nnid, 24*time.Hour)))
+}
+
+// serverTime answers the console's clock check: an empty 200 with the time in milliseconds in X-Nintendo-Date.
+func (s *Service) serverTime(w http.ResponseWriter, r *http.Request) {
+	now := s.cfg.Now()
+
+	w.Header().Set("X-Nintendo-Date", strconv.FormatInt(now.UnixMilli(), 10))
+	w.Header().Set("Date", now.UTC().Format(http.TimeFormat))
+	w.WriteHeader(200)
+}
+
+// profile is the account data a console reads right after it logs in. There is no real profile behind a home
+// account, so this is the name and player ID with plain defaults, and the country and region the console sent.
+func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
+	nnid, ok := s.bearer(r)
+	if !ok {
+		writeInvalidToken(w)
+		return
+	}
+
+	pid, err := s.PIDFor(nnid)
+	if err != nil {
+		s.cfg.Logf("account: %v", err)
+		writeError(w, 500, "0008", "Internal error")
+		return
+	}
+
+	var created time.Time
+	if err := s.cfg.DB.QueryRow(`SELECT created FROM datastore.accounts WHERE pid = $1`, pid).Scan(&created); err != nil || created.IsZero() {
+		created = s.cfg.Now()
+	}
+
+	country := strings.ToUpper(strings.TrimSpace(r.Header.Get("X-Nintendo-Country")))
+	if len(country) != 2 {
+		country = "US"
+	}
+
+	region := strings.TrimSpace(r.Header.Get("X-Nintendo-Region"))
+	if region == "" {
+		region = "2"
+	}
+
+	stamp := created.UTC().Format("2006-01-02T15:04:05")
+
+	writeXML(w, 200, fmt.Sprintf(`<person><active_flag>Y</active_flag><birth_date>1990-01-01</birth_date><country>%s</country><create_date>%s</create_date>`+
+		`<device_attributes></device_attributes><gender>M</gender><language>en</language><updated>%s</updated><marketing_flag>N</marketing_flag>`+
+		`<off_device_flag>N</off_device_flag><pid>%d</pid><email><address>%s@home.invalid</address><id>%d</id><parent>N</parent><primary>Y</primary>`+
+		`<reachable>N</reachable><type>DEFAULT</type><updated_by>USER</updated_by><validated>N</validated><validated_date></validated_date></email>`+
+		`<region>%s</region><tz_name>America/New_York</tz_name><user_id>%s</user_id><utc_offset>-18000</utc_offset></person>`,
+		esc(country), stamp, stamp, pid, esc(nnid), pid, esc(region), esc(nnid)))
 }
 
 func (s *Service) mappedIDs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.bearer(r); !ok {
-		writeError(w, 400, "0002", "Invalid access token")
+		writeInvalidToken(w)
 		return
 	}
 

@@ -1,6 +1,6 @@
 # Wii U test: checklist and what to send back
 
-For someone trying [setup-wiiu.md](setup-wiiu.md) on a real console. It has not been tried yet, so the useful result is either "it works" or the exact place it stopped. Plan on an hour.
+For someone trying [setup-wiiu.md](setup-wiiu.md) on a real console. It has been tried on one console (login and an Easy 100 Mario Challenge work; see the status in setup-wiiu.md), so the useful result is either "it works" or the exact place it stopped. Plan on an hour.
 
 ## You need
 

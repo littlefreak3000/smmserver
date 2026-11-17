@@ -1,13 +1,18 @@
 package consoleproxy_test
 
 import (
+	"bufio"
 	"crypto/tls"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/PretendoNetwork/super-mario-maker/consoleproxy"
 )
@@ -114,4 +119,138 @@ func TestPortExplainsItselfToABrowser(t *testing.T) {
 	}
 
 	_ = c
+}
+
+// The Wii U's SpotPass services are not served, but what the console asks for is recorded (credentials hidden).
+func TestSpotPassRequestsAreLoggedAndAnswered404(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+
+	p, err := consoleproxy.New(consoleproxy.Config{
+		Account: http.NotFoundHandler(),
+		Logf: func(f string, a ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+
+			lines = append(lines, fmt.Sprintf(f, a...))
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(p)
+	t.Cleanup(srv.Close)
+
+	proxyURL, _ := url.Parse(srv.URL)
+	c := &http.Client{Transport: &http.Transport{
+		Proxy: http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS10,
+			MaxVersion:         tls.VersionTLS10,
+			CipherSuites:       []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA},
+		},
+	}}
+
+	for _, host := range []string{"nppl.app.pretendo.cc", "npts.app.pretendo.cc", "npdl.cdn.pretendo.cc"} {
+		req, _ := http.NewRequest("GET", "https://"+host+"/p01/tasksheet/1/abc/Task?c=US&l=en", nil)
+		req.Header.Set("X-Nintendo-Title-Id", "000500001018db00")
+		req.Header.Set("Authorization", "Bearer secret-token")
+
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s: status %d", host, resp.StatusCode)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	all := strings.Join(lines, "\n")
+
+	for _, want := range []string{"SpotPass request GET nppl.app.pretendo.cc:443/p01/tasksheet/1/abc/Task?c=US&l=en", "npdl.cdn.pretendo.cc", `X-Nintendo-Title-Id="000500001018db00"`, "Authorization=<hidden>"} {
+		if !strings.Contains(all, want) {
+			t.Fatalf("log lacks %q:\n%s", want, all)
+		}
+	}
+
+	if strings.Contains(all, "secret-token") {
+		t.Fatalf("a credential was logged:\n%s", all)
+	}
+}
+
+// A console that finishes the TLS handshake and then sends something that is not HTTP must leave a trace.
+func TestAConnectionWithoutAnUnderstoodRequestIsLogged(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+
+	p, err := consoleproxy.New(consoleproxy.Config{
+		Account: http.NotFoundHandler(),
+		Logf: func(f string, a ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+
+			lines = append(lines, fmt.Sprintf(f, a...))
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(p)
+	t.Cleanup(srv.Close)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer conn.Close()
+
+	fmt.Fprint(conn, "CONNECT nppl.app.pretendo.cc:443 HTTP/1.1\r\nHost: nppl.app.pretendo.cc:443\r\n\r\n")
+
+	br := bufio.NewReader(conn)
+	if status, _ := br.ReadString('\n'); !strings.Contains(status, "200") {
+		t.Fatalf("CONNECT answered %q", status)
+	}
+
+	br.ReadString('\n') // the blank line that ends the response
+
+	tc := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, MaxVersion: tls.VersionTLS10, CipherSuites: []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA}})
+	if err := tc.Handshake(); err != nil {
+		t.Fatal(err)
+	}
+
+	tc.Write([]byte("\x01\x02not http at all\r\n\r\n"))
+	tc.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		all := strings.Join(lines, "\n")
+		mu.Unlock()
+
+		if strings.Contains(all, "ended without a request") && strings.Contains(all, "not http at all") && strings.Contains(all, "TLS with the console for nppl.app.pretendo.cc:443") {
+			return
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	t.Fatalf("no trace of the connection:\n%s", strings.Join(lines, "\n"))
 }

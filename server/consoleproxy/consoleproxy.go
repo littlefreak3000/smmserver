@@ -20,8 +20,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -161,8 +163,17 @@ func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	st := tc.ConnectionState()
+	p.cfg.Logf("proxy: TLS with the console for %s: version %#x, cipher %#x, server name %q", host, st.Version, st.CipherSuite, st.ServerName)
+
+	// * Record the first bytes the console sends, so a request the HTTP server cannot make sense of is not silent.
+	tap := &tapConn{Conn: tc}
+
+	var served atomic.Bool
+
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			served.Store(true)
 			p.cfg.Logf("proxy: %s https://%s%s", r.Method, host, r.URL.RequestURI())
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				r.Host = h
@@ -175,7 +186,49 @@ func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 
-	_ = srv.Serve(&oneConn{conn: tc})
+	_ = srv.Serve(&oneConn{conn: tap})
+
+	if !served.Load() {
+		p.cfg.Logf("proxy: connection for %s ended without a request the proxy understood; %d bytes received, first bytes %q, last read error: %v", host, tap.total, tap.first, tap.err())
+	}
+}
+
+// tapConn remembers the first bytes read from a connection.
+type tapConn struct {
+	net.Conn
+	mu      sync.Mutex
+	first   []byte
+	total   int
+	lastErr error
+}
+
+func (t *tapConn) err() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.lastErr
+}
+
+func (t *tapConn) Read(b []byte) (int, error) {
+	n, err := t.Conn.Read(b)
+
+	t.mu.Lock()
+	t.total += n
+
+	if err != nil {
+		t.lastErr = err
+	}
+
+	if room := 600 - len(t.first); room > 0 && n > 0 {
+		if n > room {
+			n = room
+		}
+
+		t.first = append(t.first, b[:n]...)
+	}
+	t.mu.Unlock()
+
+	return n, err
 }
 
 // known says whether a host:port is something the home server answers.
@@ -187,7 +240,45 @@ func (p *Proxy) known(hostport string) bool {
 
 	host = strings.ToLower(host)
 
-	return strings.Contains(host, "account.") || strings.Contains(host, "conntest") || (p.s3 != nil && port == p.cfg.S3Port)
+	return strings.Contains(host, "account.") || strings.Contains(host, "conntest") || spotpass(host) || (p.s3 != nil && port == p.cfg.S3Port)
+}
+
+// spotpass says whether a host is one of the Wii U's SpotPass (BOSS) services: the policy list (nppl), task lists (npts),
+// file downloads (npdl), file lists (npfl) and push notifications (npns). The game and the system use them to download
+// extra data in the background. They are not served here; the proxy only records what the console asks for (see route).
+func spotpass(host string) bool {
+	label, _, _ := strings.Cut(strings.ToLower(host), ".")
+
+	switch label {
+	case "nppl", "npts", "npdl", "npfl", "npns":
+		return true
+	}
+
+	return false
+}
+
+// logRequest records a request the home server does not answer: the line, and every header except credentials, so a
+// missing service can be worked out from what the console sends.
+func (p *Proxy) logRequest(r *http.Request, hostport string) {
+	names := make([]string, 0, len(r.Header))
+	for k := range r.Header {
+		names = append(names, k)
+	}
+
+	sort.Strings(names)
+
+	var b strings.Builder
+
+	for _, k := range names {
+		if strings.EqualFold(k, "Authorization") || strings.EqualFold(k, "Cookie") {
+			fmt.Fprintf(&b, " %s=<hidden>", k)
+			continue
+		}
+
+		fmt.Fprintf(&b, " %s=%q", k, strings.Join(r.Header[k], ","))
+	}
+
+	p.cfg.Logf("proxy: SpotPass request %s %s%s (body %d bytes) headers:%s", r.Method, hostport, r.URL.RequestURI(), r.ContentLength, b.String())
 }
 
 func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
@@ -207,6 +298,9 @@ func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 		fmt.Fprint(w, connTestBody)
 	case p.s3 != nil && port == p.cfg.S3Port:
 		p.s3.ServeHTTP(w, r)
+	case spotpass(host):
+		p.logRequest(r, hostport)
+		http.Error(w, "not found", http.StatusNotFound)
 	default:
 		p.cfg.Logf("proxy: no answer for %s (the home server does not stand in for it)", hostport)
 		http.Error(w, "not served by the home server", http.StatusNotFound)

@@ -377,15 +377,18 @@ func TestRefreshTokenAndTamperedAndExpiredTokens(t *testing.T) {
 		}
 	}
 
-	check("no auth", "", 400, "0002")
-	check("garbage", "Bearer nonsense", 400, "0002")
-	parts := strings.Split(r.Token, ".")
-	parts[2] = "99999999999"
-	check("tampered expiry", "Bearer "+strings.Join(parts, "."), 400, "0002")
-	check("refresh used as access", "Bearer "+r.Refresh, 400, "0002")
+	check("no auth", "", 400, "0005")
+	check("garbage", "Bearer nonsense", 400, "0005")
+	if len(r.Token) != 32 || len(r.Refresh) != 32 {
+		t.Fatalf("tokens must be exactly 32 characters (a Wii U cuts longer ones off): %q %q", r.Token, r.Refresh)
+	}
+
+	// * push the expiry (hex digits 8-15) into the far future without re-signing
+	check("tampered expiry", "Bearer "+r.Token[:8]+"ffffffff"+r.Token[16:], 400, "0005")
+	check("refresh used as access", "Bearer "+r.Refresh, 400, "0005")
 
 	e.now = e.now.Add(2 * time.Hour)
-	check("expired", "Bearer "+r.Token, 400, "0002")
+	check("expired", "Bearer "+r.Token, 400, "0005")
 }
 
 func TestBadRequestsAndUnknownPathsGetXMLErrors(t *testing.T) {
@@ -410,7 +413,7 @@ func TestBadRequestsAndUnknownPathsGetXMLErrors(t *testing.T) {
 		t.Fatalf("missing game_server_id: %s", body)
 	}
 
-	code, body := e.do(t, "GET", "/v1/api/people/@me/profile", map[string]string{"Authorization": "Bearer " + access}, nil)
+	code, body := e.do(t, "GET", "/v1/api/people/@me/friends", map[string]string{"Authorization": "Bearer " + access}, nil)
 	if code != 404 || !strings.Contains(body, "<errors>") {
 		t.Fatalf("unknown path: %d %s", code, body)
 	}
@@ -418,5 +421,48 @@ func TestBadRequestsAndUnknownPathsGetXMLErrors(t *testing.T) {
 	code, body = e.do(t, "GET", "/v1/api/provider/service_token/@me?client_id=abc", map[string]string{"Authorization": "Bearer " + access}, nil)
 	if code != 200 || !strings.Contains(body, "<service_token><token>") {
 		t.Fatalf("service token: %d %s", code, body)
+	}
+}
+
+// A console reads the server clock and its own profile right after it logs in; without them the login is abandoned.
+func TestLoginExtras(t *testing.T) {
+	e := setup(t)
+	access := e.oauth(t, "ProfileUser")
+	auth := map[string]string{"Authorization": "Bearer " + access}
+
+	req, _ := http.NewRequest("GET", e.srv.URL+"/v1/api/admin/time", nil)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp.Body.Close()
+
+	ms, perr := strconv.ParseInt(resp.Header.Get("X-Nintendo-Date"), 10, 64)
+	if resp.StatusCode != 200 || perr != nil || ms < 1_000_000_000_000 {
+		t.Fatalf("time: %d %q", resp.StatusCode, resp.Header.Get("X-Nintendo-Date"))
+	}
+
+	code, body := e.do(t, "GET", "/v1/api/people/@me/profile", auth, nil)
+
+	var p struct {
+		PID     uint32 `xml:"pid"`
+		UserID  string `xml:"user_id"`
+		Country string `xml:"country"`
+		Active  string `xml:"active_flag"`
+	}
+
+	if err := xml.Unmarshal([]byte(body), &p); err != nil || code != 200 {
+		t.Fatalf("profile: %d %v\n%s", code, err, body)
+	}
+
+	pid, _ := e.svc.PIDFor("ProfileUser")
+	if p.PID != pid || p.UserID != "ProfileUser" || p.Country != "US" || p.Active != "Y" {
+		t.Fatalf("profile = %+v (pid %d)", p, pid)
+	}
+
+	if code, body = e.do(t, "GET", "/v1/api/people/@me/profile", nil, nil); code != 400 || !strings.Contains(body, "<code>0005</code>") {
+		t.Fatalf("profile without a token: %d %s", code, body)
 	}
 }

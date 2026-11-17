@@ -59,7 +59,7 @@ ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" becau
    - Run "${t.exe} account <path to the account.dat>" (or "${t.exe} account new <name> <path to Cemu's mlc01>") so the account's
      player ID matches this server. Close Cemu first.
    - In Cemu: Options > General settings > Account > Network Service: Custom.
-   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; that route has not been tried on a console yet.
+   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; that route is only partly working: login and levels work, but a Normal 100 Mario Challenge can stop with error 104-1970.
 
 4. STOP IT
    Press Ctrl+C in the window. This saves the level list. Copy or move the "data" folder only while the server is stopped.
@@ -75,8 +75,8 @@ PLEASE KNOW
      do not forward its ports on your router.
    - Levels are downloaded from volunteer-run public services (api.bobac-analytics.com and web.archive.org) at a low rate,
      from this computer's address. SMM_FETCH=0 turns that off.
-   - Status: works in Cemu 2.6 (Course World, 100 Mario Challenge, creator Miis and names, clear screens). Not tested on a
-     real Wii U yet. Flags are a regional guess: the archive does not say where creators live.
+   - Status: works in Cemu 2.6 (Course World, 100 Mario Challenge, creator Miis and names, clear screens). On a real
+     Wii U (Inkay) login and levels work, but error 104-1970 can stop a Normal challenge. Flags are a regional guess: the archive does not say where creators live.
    - Licence: AGPL-3.0 (see LICENSE). If you pass this program on, you must also offer the source code.
 `;
 
