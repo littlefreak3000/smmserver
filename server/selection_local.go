@@ -178,6 +178,28 @@ func applyCacheToSeeds(store *challenge.Store) {
 	}
 }
 
+// historyLevels reads SMM_HISTORY_LEVELS: how many of a player's most recently played levels the server remembers
+// (default selection.DefaultHistory; 0 would mean the default, so "off" is -1 or "off").
+func historyLevels() int {
+	v := strings.ToLower(strings.TrimSpace(getenv("SMM_HISTORY_LEVELS", "")))
+
+	switch v {
+	case "":
+		return selection.DefaultHistory
+	case "off", "-1":
+		return -1
+	}
+
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		globals.Logger.Warningf("SMM_HISTORY_LEVELS must be a number > 0 or \"off\"; using %d", selection.DefaultHistory)
+
+		return selection.DefaultHistory
+	}
+
+	return n
+}
+
 // startSelection connects the course lists to the index and the challenge seeds. Needs the catalog open; runs after startFetching.
 func startSelection() {
 	store := ensureSeedStore()
@@ -191,7 +213,8 @@ func startSelection() {
 
 	// * pool mode: levels just played go to the back of random lists, and the pool grows where the unplayed ones run low
 	if archiveIdx == nil {
-		nex_datastore_super_mario_maker.Played = func(id uint64) { sel.MarkPlayed(int64(id)) }
+		sel.HistoryLevels = historyLevels()
+		nex_datastore_super_mario_maker.Played = func(nnid string, id uint64) { sel.MarkPlayed(nnid, int64(id)) }
 
 		if fetchPool != nil {
 			sel.NeedMore = func(lo, hi int64, unseen int) { fetchPool.Boost(context.Background(), lo, hi) }

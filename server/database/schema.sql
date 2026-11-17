@@ -143,6 +143,17 @@ CREATE TABLE IF NOT EXISTS index_dead (
 	marked TIMESTAMP
 );
 
+-- What each player opened (server/selection): random lists offer other levels first. A rolling window: the server keeps only
+-- the most recent levels per player (SMM_HISTORY_LEVELS, default 1000) and deletes the older rows, so it cannot grow without
+-- limit. played_at is unix milliseconds; a level played again moves to the front of the window.
+CREATE TABLE IF NOT EXISTS play_history (
+	nnid TEXT NOT NULL COLLATE NOCASE,
+	data_id INTEGER NOT NULL,
+	played_at INTEGER NOT NULL,
+	PRIMARY KEY (nnid, data_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS play_history_recent ON play_history (nnid, played_at DESC);
+
 -- Emulates `CREATE SEQUENCE ... START 940000`: AUTOINCREMENT hands out max(seq, max rowid)+1
 INSERT INTO sqlite_sequence (name, seq)
 	SELECT 'objects', 939999

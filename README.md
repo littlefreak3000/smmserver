@@ -2,7 +2,7 @@
 
 A home server for **Super Mario Maker (Wii U)** with an archive of old levels. It stands in for the game's online service on your own network, so Course World and the 100 Mario Challenge work again, using levels that volunteers saved before the official servers shut down.
 
-It runs as one self-contained program: no database, object store or other service to install. The game connects through [Cemu](https://cemu.info) today; a modded Wii U is described but has not been tried yet.
+It runs as one self-contained program: no database, object store or other service to install. The game connects through [Cemu](https://cemu.info) today; a modded Wii U logs in and plays levels but is only partly working ([details](docs/setup-wiiu.md)).
 
 - Archived levels are fetched from public services while you play, so the server starts small and grows.
 - Creator names, Miis and clear screens work.
@@ -11,7 +11,7 @@ It runs as one self-contained program: no database, object store or other servic
 Guides:
 
 - **[Playing on Cemu](docs/setup-cemu.md)**
-- **[Playing on a modded Wii U](docs/setup-wiiu.md)** (not tested on a console) and [its tester checklist](docs/wiiu-tester-checklist.md)
+- **[Playing on a modded Wii U](docs/setup-wiiu.md)** (tried on one console: partly working) and [its tester checklist](docs/wiiu-tester-checklist.md)
 
 ## Contents
 
@@ -71,6 +71,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_FETCH` | `0` runs the server fully offline, with only the levels already downloaded | on |
 | `SMM_POOL_TARGET` | Levels kept ready in each of four clear-rate bands | 25 |
 | `SMM_POOL_GROW_EVERY`, `SMM_POOL_GROW_BY`, `SMM_POOL_MAX` | Slow growth of the pool (see below) | 10m, 1, 250 |
+| `SMM_HISTORY_LEVELS` | How many of each player's most recently played levels the server remembers so lists skip them (`off` = none) | 1000 |
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
 | `SMM_DIFFICULTY_PRIOR` | How levels are sorted by difficulty: `off` (raw clear rate) or `MEAN,STRENGTH` | `0.2,3` |
 | `SMM_TRACE` | `1` logs every request the game makes; only for tracking down problems | off |
@@ -109,7 +110,7 @@ Two behaviours, both on by default:
 
 **Growth.** After the first fill the pool grows slowly while the server runs: every `SMM_POOL_GROW_EVERY` (`0` stops growth) each band gets `SMM_POOL_GROW_BY` more levels, until every band holds `SMM_POOL_MAX` (about 1,000 levels, 48 MB). A growth step has a small draw budget and the target follows the emptiest band, so a band the archive cannot fill right now never causes a burst of requests or lets the other bands balloon. For a one-time bigger pool, start once with a larger `SMM_POOL_TARGET`; it uses the same code path at the same request rate.
 
-**Repeats.** Without the whole-archive index a round of random levels can only come from the pool, so it would repeat quickly (a 50-level list out of about 120 levels). Levels that were just opened (for 12 hours) go to the back of the random lists, and when the unplayed levels of a difficulty run low the pool fetches 12 more for the bands of that difficulty in the background. A seeded challenge list is not affected. The "played" memory is in RAM, so a restart forgets it, and it is shared by everyone on the server.
+**Repeats.** Without the whole-archive index a round of random levels can only come from the pool, so it would repeat quickly (a 50-level list out of about 120 levels). Levels a player downloaded to play go to the back of that player's random lists, and when the levels they have not played run low in a difficulty the pool fetches 12 more for the bands of that difficulty in the background. When everything in a range was played, the ones played longest ago come first. A seeded challenge list is not affected. The history is kept per player in the catalog file (`play_history`), so it survives restarts. It is a rolling window: only the player's last `SMM_HISTORY_LEVELS` levels (default 1000, about 30 KB) are kept, and older rows are deleted as new ones arrive, so it never grows past that. A cache export leaves the history out. It only knows what was played through this server; the game's own "recently played" list lives on the console.
 
 **Size limit (optional, off by default).** Growth by timer stops at `SMM_POOL_MAX`, but the levels fetched while playing have no cap, so a heavy player's data folder keeps growing. With `SMM_CACHE_MAX_MB` set (for example `500`), the server checks every five minutes how much the downloaded level files take. Over the limit it removes the oldest levels, by when they were fetched, down to 90% of the limit, together with their ratings, rankings and records. Levels a local account starred or made are never removed, and the game can fetch a removed level again if it asks for it. Values from 1 to 19 are raised to 20 MB, `0` means no limit, and the limit applies while fetching is on. New levels keep arriving, so the pool becomes a rolling window of the most recently fetched levels.
 
@@ -185,7 +186,7 @@ No level files are committed. The few tests that need a real course file are ski
 
 **Not tried.**
 
-- A real Wii U. [docs/setup-wiiu.md](docs/setup-wiiu.md) describes the route (Inkay plus the built-in proxy on port 8888 that stands in for `account.pretendo.cc`) and what to report if it fails. It needs an account that already exists on the console (`smm-server account adopt`); creating or linking accounts, SSSL, the shop, Miiverse and friends are not built.
+- A real Wii U beyond a first trial. Login, course lists and downloads work and an Easy 100 Mario Challenge was played; a Normal one can stop on a "downloading additional data" popup with error 104-1970 (a SpotPass download the server does not provide), cause not found yet. [docs/setup-wiiu.md](docs/setup-wiiu.md) describes the route (Inkay plus the built-in proxy on port 8888 that stands in for `account.pretendo.cc`) and what to report if it fails. It needs an account that already exists on the console (`smm-server account adopt`); creating or linking accounts, SSSL, the shop, Miiverse and friends are not built.
 - Other game regions, and the 3DS.
 - `smm-server account new` has not been run against Cemu yet. It writes the same fields as a hand-made account that worked.
 

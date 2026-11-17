@@ -6,6 +6,7 @@ import (
 	"github.com/PretendoNetwork/nex-go/v2"
 	"github.com/PretendoNetwork/nex-go/v2/types"
 	datastore_super_mario_maker_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/super-mario-maker/types"
+	datastore_types "github.com/PretendoNetwork/nex-protocols-go/v2/datastore/types"
 	datastore_smm_db "github.com/PretendoNetwork/super-mario-maker/database/datastore/super-mario-maker"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	"github.com/PretendoNetwork/super-mario-maker/selection"
@@ -30,9 +31,18 @@ var Settle func(ids []int64)
 // for it (nil = nothing to look up). Set by the home server when fetching is on.
 var EnsureRecord func(dataID uint64)
 
-// Played is told when the game opens a level (a course, not a profile), so random lists offer other levels first
-// (nil = nothing to tell). Set by the home server.
-var Played func(dataID uint64)
+// Played is told when a player downloads a level to play it (nnid is "" when the player is unknown), so that player's
+// random lists offer other levels first (nil = nothing to tell). Set by the home server.
+var Played func(nnid string, dataID uint64)
+
+// NoteDownload is the PrepareGetObject hook: the game asks for a download URL only for a level it is about to play.
+func NoteDownload(packet nex.PacketInterface, param datastore_types.DataStorePrepareGetParam) {
+	if Played == nil || param.DataID == 0 {
+		return
+	}
+
+	Played(requester(packet), uint64(param.DataID))
+}
 
 // requester returns the NNID of the player who made the call ("" when unknown).
 func requester(packet nex.PacketInterface) string {

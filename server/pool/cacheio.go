@@ -173,6 +173,7 @@ func stripLocalData(path string) error {
 		`DELETE FROM datastore.course_records WHERE data_id NOT IN (SELECT data_id FROM datastore.objects)`,
 		`DELETE FROM datastore.accounts`,
 		`DELETE FROM datastore.challenge_seeds`,
+		`DELETE FROM datastore.play_history`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			return fmt.Errorf("cleaning the copy: %w", err)

@@ -19,7 +19,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/PretendoNetwork/super-mario-maker/difficulty"
@@ -65,48 +64,95 @@ type Selector struct {
 	Logf     func(format string, args ...any)
 
 	// NeedMore is told when a random list (no index, no seed) is drawn from a clear-rate range [min, max] (percent)
-	// that has only `unseen` levels left that were not played recently, so the catalog can fetch more of them in the
-	// background. It must not block.
+	// that has only `unseen` levels left that the player has not opened recently, so the catalog can fetch more of them
+	// in the background. It must not block.
 	NeedMore func(min, max int64, unseen int)
 
-	playedMu sync.Mutex
-	played   map[int64]time.Time
+	// HistoryLevels is how many levels the server remembers per player (0 = DefaultHistory, negative = remember nothing).
+	HistoryLevels int
 }
 
-// PlayedFor is how long a level that was just played is kept out of random lists, as long as other levels are available.
-const PlayedFor = 12 * time.Hour
+// DefaultHistory is how many of a player's most recently opened levels are remembered. Each takes a few dozen bytes
+// in the catalog, so a player's history stays around 30 KB however long they play.
+const DefaultHistory = 1000
 
-// MarkPlayed remembers that a level was just opened, so the next random lists offer other levels first. Only the
-// catalog picker (no index, no seed) uses this: with the whole archive a repeat is already unlikely, and a seeded
-// list must not change.
-func (s *Selector) MarkPlayed(id int64) {
-	s.playedMu.Lock()
-	defer s.playedMu.Unlock()
-
-	if s.played == nil {
-		s.played = map[int64]time.Time{}
+func (s *Selector) historyLevels() int {
+	if s.HistoryLevels == 0 {
+		return DefaultHistory
 	}
 
-	now := time.Now()
-	s.played[id] = now
+	return s.HistoryLevels
+}
 
-	// * forget old entries now and then so the map stays small
-	if len(s.played) > 4096 {
-		for k, t := range s.played {
-			if now.Sub(t) > PlayedFor {
-				delete(s.played, k)
-			}
+// MarkPlayed remembers that a player opened a level, so their next random lists offer other levels first. The history is
+// a rolling window of the player's last historyLevels() levels in the catalog file, so it survives restarts and the
+// rows of older levels are deleted as new ones come in. Only the catalog picker (no index, no seed) consults it: with
+// the whole archive a repeat is already unlikely, and a seeded list must not change. Ids that are not levels (profiles,
+// the event list) are ignored.
+func (s *Selector) MarkPlayed(nnid string, id int64) {
+	limit := s.historyLevels()
+	if s.DB == nil || limit < 0 {
+		return
+	}
+
+	var one int
+
+	err := s.DB.QueryRow(`SELECT 1 FROM datastore.objects WHERE data_id = $1 AND data_type > 2 AND data_type < 50`, id).Scan(&one)
+	if err != nil {
+		return
+	}
+
+	tx, err := s.DB.Begin()
+	if err != nil {
+		s.logf("selection: cannot save the play history: %v", err)
+
+		return
+	}
+
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.Exec(`INSERT INTO datastore.play_history (nnid, data_id, played_at) VALUES ($1, $2, $3)
+		ON CONFLICT (nnid, data_id) DO UPDATE SET played_at = excluded.played_at`, nnid, id, time.Now().UnixMilli())
+	if err == nil {
+		// * the rolling window: everything after the newest `limit` entries of this player goes
+		_, err = tx.Exec(`DELETE FROM datastore.play_history WHERE nnid = $1 AND data_id IN (
+			SELECT data_id FROM datastore.play_history WHERE nnid = $1 ORDER BY played_at DESC, data_id DESC LIMIT -1 OFFSET $2)`, nnid, limit)
+	}
+
+	if err == nil {
+		err = tx.Commit()
+	}
+
+	if err != nil {
+		s.logf("selection: cannot save the play history: %v", err)
+	}
+}
+
+// recentlyPlayed returns the levels in a player's history with the time (unix milliseconds) each was last opened.
+func (s *Selector) recentlyPlayed(nnid string) map[int64]int64 {
+	played := map[int64]int64{}
+
+	if s.DB == nil || s.historyLevels() < 0 {
+		return played
+	}
+
+	rows, err := s.DB.Query(`SELECT data_id, played_at FROM datastore.play_history WHERE nnid = $1`, nnid)
+	if err != nil {
+		s.logf("selection: cannot read the play history: %v", err)
+
+		return played
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, at int64
+		if rows.Scan(&id, &at) == nil {
+			played[id] = at
 		}
 	}
-}
 
-func (s *Selector) wasPlayed(id int64) bool {
-	s.playedMu.Lock()
-	defer s.playedMu.Unlock()
-
-	t, ok := s.played[id]
-
-	return ok && time.Since(t) < PlayedFor
+	return played
 }
 
 func (s *Selector) logf(f string, a ...any) {
@@ -287,9 +333,17 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 		id     int64
 		w      uint64
 		played bool
+		at     int64 // when the player last opened it (0 = not in their history)
 	}
 
-	var all []weighted
+	var (
+		all     []weighted
+		history map[int64]int64
+	)
+
+	if fresh {
+		history = s.recentlyPlayed(q.NNID)
+	}
 
 	norm, ctx := index.NormalizeSeed(seed), q.context(q.Min, q.Max)
 
@@ -326,7 +380,8 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 		}
 
 		h := sha256.Sum256([]byte(fmt.Sprintf("smm-pick-v%d\x00%s\x00%s\x00%d", index.AlgorithmVersion, norm, ctx, id)))
-		all = append(all, weighted{id, binary.BigEndian.Uint64(h[:8]), fresh && s.wasPlayed(id)})
+		at, played := history[id]
+		all = append(all, weighted{id, binary.BigEndian.Uint64(h[:8]), played, at})
 	}
 
 	if err := rows.Err(); err != nil {
@@ -344,6 +399,11 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 	sort.Slice(all, func(i, j int) bool {
 		if all[i].played != all[j].played {
 			return !all[i].played
+		}
+
+		// * when only played levels are left, the ones opened longest ago come first
+		if all[i].played && all[i].at != all[j].at {
+			return all[i].at < all[j].at
 		}
 
 		if all[i].w != all[j].w {

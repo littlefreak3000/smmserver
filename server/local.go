@@ -41,6 +41,7 @@ import (
 //	SMM_FETCH         fetch archived levels on demand from the public archive (default 1; 0 = fully offline)
 //	SMM_POOL_TARGET   levels to keep in each of 4 clear-rate bands, fetched in the background (default 25; 0 = none)
 //	SMM_POOL_GROW_EVERY / _GROW_BY / SMM_POOL_MAX  slow growth: every 10m add 1 level per band, up to 250 per band (0 = stop)
+//	SMM_HISTORY_LEVELS  how many of each player's most recently played levels to remember so lists skip them (default 1000; off = none)
 //	SMM_FETCH_API / SMM_FETCH_WAYBACK  override the two upstream services
 //	SMM_BIND_HOST     bind the HTTP services (S3, account) to one address, e.g. 127.0.0.1 (default: all; the NEX UDP ports always bind all)
 //	SMM_ACCOUNT_PORT  port of the built-in account service for Cemu (default 8080, 0 = off)
@@ -509,6 +510,8 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
 #SMM_POOL_MAX=250
+# Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
+#SMM_HISTORY_LEVELS=1000
 # Size limit for the downloaded levels, in megabytes. When they take more, the oldest levels are removed (levels you starred or
 # made are kept; the game can fetch a removed level again). 0 = no limit (the default). Only used while fetching is on.
 #SMM_CACHE_MAX_MB=0

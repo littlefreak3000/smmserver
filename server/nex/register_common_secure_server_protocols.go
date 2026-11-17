@@ -82,15 +82,13 @@ func registerCommonSecureProtocols() {
 			} else {
 				globals.Tracef("GetMeta/PrepareGet by data id %d: owner %d type %d", dataID, meta.OwnerID, meta.DataType)
 			}
-
-			// * a level the game opens counts as played: random lists offer other levels first from now on
-			if nex_datastore_super_mario_maker.Played != nil && meta.DataType > 2 && meta.DataType < 50 {
-				nex_datastore_super_mario_maker.Played(uint64(dataID))
-			}
 		}
 
 		return meta, e
 	}
+	// * a level the player downloads counts as played: that player's random lists offer other levels first from now on
+	commonDataStoreProtocol.OnAfterPrepareGetObject = nex_datastore_super_mario_maker.NoteDownload
+
 	commonDataStoreProtocol.GetObjectOwnerByDataID = datastore_db.GetObjectOwnerByDataID
 	commonDataStoreProtocol.GetObjectSizeByDataID = datastore_db.GetObjectSizeByDataID
 
