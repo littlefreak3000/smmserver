@@ -559,6 +559,9 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_MAX=250
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
+# Wii U with Inkay: by default only the game is answered and the console's own programs (Wii U Menu, friends, Miiverse) are left
+# alone. 1 sends them on to the real Pretendo Network instead (needs a Pretendo account on the console).
+#SMM_PROXY_PRETENDO=1
 # Size limit for the downloaded levels, in megabytes. When they take more, the oldest levels are removed (levels you starred or
 # made are kept; the game can fetch a removed level again). 0 = no limit (the default). Only used while fetching is on.
 #SMM_CACHE_MAX_MB=0

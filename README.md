@@ -2,7 +2,7 @@
 
 A home server for **Super Mario Maker (Wii U)** with an archive of old levels. It stands in for the game's online service on your own network, so Course World and the 100 Mario Challenge work again, using levels that volunteers saved before the official servers shut down.
 
-It runs as one self-contained program: no database, object store or other service to install. The game connects through [Cemu](https://cemu.info) today; a modded Wii U logs in and plays levels but is only partly working ([details](docs/setup-wiiu.md)).
+It runs as one self-contained program: no database, object store or other service to install. The game connects through [Cemu](https://cemu.info) today; a modded Wii U (Aroma + Inkay) works too ([guide](docs/setup-wiiu.md)).
 
 - Archived levels are fetched from public services while you play, so the server starts small and grows.
 - Creator names, Miis and clear screens work.
@@ -11,7 +11,7 @@ It runs as one self-contained program: no database, object store or other servic
 Guides:
 
 - **[Playing on Cemu](docs/setup-cemu.md)**
-- **[Playing on a modded Wii U](docs/setup-wiiu.md)** (tried on one console: partly working) and [its tester checklist](docs/wiiu-tester-checklist.md)
+- **[Playing on a modded Wii U](docs/setup-wiiu.md)** (works on one console) and [its tester checklist](docs/wiiu-tester-checklist.md)
 
 ## Contents
 
@@ -33,7 +33,7 @@ Guides:
    - Windows shows a SmartScreen warning because the program is not code-signed: choose "More info", then "Run anyway".
    - Windows Firewall asks for permission: allow **Private networks**, or the console cannot connect.
 2. Leave the window open. It prints a box with this computer's address. The first start downloads about 100 levels in the background (roughly five minutes) and more arrive slowly while it runs. It creates a `data` folder next to the program with its own keys, a commented `settings.env` and the level archive.
-3. Connect Cemu: follow [docs/setup-cemu.md](docs/setup-cemu.md). In short, copy `data/network_services.xml` next to Cemu's `settings.xml` and set the account's Network Service to **Custom**.
+3. Connect Cemu: follow [docs/setup-cemu.md](docs/setup-cemu.md). In short, copy `data/network_services.xml` next to Cemu's `settings.xml` and set the account's Network Service to **Custom**. For a modded Wii U follow [docs/setup-wiiu.md](docs/setup-wiiu.md) instead: the box the server prints shows the proxy address and port to type on the console.
 4. Stop with Ctrl+C, which saves the catalog. Copy the `data` folder only while the server is stopped.
 
 `smm-server --help` summarises this. Everything that can be changed is in `data/settings.env`; environment variables override it.
@@ -75,6 +75,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
 | `SMM_DIFFICULTY_PRIOR` | How levels are sorted by difficulty: `off` (raw clear rate) or `MEAN,STRENGTH` | `0.2,3` |
 | `SMM_TRACE` | `1` logs every request the game makes; only for tracking down problems | off |
+| `SMM_PROXY_PRETENDO` | `1` lets a Wii U's own programs (Wii U Menu, friends, Miiverse) keep using the real Pretendo Network through the proxy; needs a Pretendo account on the console. By default only the game is answered and the rest is dropped (see [docs/setup-wiiu.md](docs/setup-wiiu.md)) | off |
 | `SMM_DATA_DIR` | A different data folder | `./data` |
 
 Ports: account service 8080 (`SMM_ACCOUNT_PORT`, 0 = off), Wii U proxy 8888 (`SMM_PROXY_PORT`, 0 = off), course downloads 9000 (`SMM_S3_PORT`), NEX authentication 60000 and secure 60001 (UDP). Allow them in the firewall if the console or Cemu cannot connect. `SMM_PUBLIC_HOST` is also the address the console uses to download courses. Setting `PN_SMM_CONFIG_S3_ENDPOINT` switches back to an external S3, and any `PN_*` variable you set yourself wins over the generated defaults.
@@ -182,11 +183,11 @@ No level files are committed. The few tests that need a real course file are ski
 
 ## Status and known limits
 
-**Works.** In Cemu 2.6 (USA, v240) the game logs in, lists levels from Course World and 100 Mario Challenge, downloads and plays them, and shows creator Miis and names in lists and on clear screens. A NEX client test (`tools/nex-smoke`) also covers login and downloads without the game.
+**Works.** In Cemu 2.6 (USA, v240) the game logs in, lists levels from Course World and 100 Mario Challenge, downloads and plays them, and shows creator Miis and names in lists and on clear screens. A NEX client test (`tools/nex-smoke`) also covers login and downloads without the game. On a real Wii U (Aroma + Inkay, USA, v240) the game starts, logs in, lists Course World and 100 Mario Challenge levels, downloads and plays them, and the played-levels history records them. The proxy answers only the game by default: if it also answered the console's own programs (Wii U Menu, friend list, Miiverse), starting a game stalled on its loading screen. `SMM_PROXY_PRETENDO=1` sends those on to the real Pretendo instead.
 
 **Not tried.**
 
-- A real Wii U beyond a first trial. Login, course lists and downloads work and an Easy 100 Mario Challenge was played; a Normal one can stop on a "downloading additional data" popup with error 104-1970 (a SpotPass download the server does not provide), cause not found yet. [docs/setup-wiiu.md](docs/setup-wiiu.md) describes the route (Inkay plus the built-in proxy on port 8888 that stands in for `account.pretendo.cc`) and what to report if it fails. It needs an account that already exists on the console (`smm-server account adopt`); creating or linking accounts, SSSL, the shop, Miiverse and friends are not built.
+- More than one Wii U. One console was tested (see above). The Normal-difficulty 100 Mario Challenge once showed a "downloading additional data" popup and error 104-1970 (a SpotPass download); that was before the current proxy behaviour and has not been re-checked. [docs/setup-wiiu.md](docs/setup-wiiu.md) has the route, the two modes, and an error-code table. Creating or linking accounts, SSSL, and the shop, Miiverse and friends (other than through Pretendo's real servers in pass-through mode) are not built.
 - Other game regions, and the 3DS.
 - `smm-server account new` has not been run against Cemu yet. It writes the same fields as a hand-made account that worked.
 

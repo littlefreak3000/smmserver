@@ -41,7 +41,7 @@ of old levels. It is a single program: nothing else to install.
 1. START IT
    ${t.goos === 'windows' ? 'Double-click smm-server.exe.' : 'In a terminal: chmod +x ./smm-server && ./smm-server'}
 ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" because the program is not code-signed: click "More info", then "Run anyway".
-   - Windows Firewall will ask for permission: tick "Private networks" and allow it. Without this, consoles cannot connect.
+   - Windows Firewall will ask for permission: tick "Private networks" and "Public networks" (Windows often marks Wi-Fi as Public) and allow it. Without this, consoles cannot connect.
 ` : t.goos === 'darwin' ? `   - macOS may block it the first time: System Settings > Privacy & Security > "Open Anyway".
 ` : `   - If a firewall is active, allow TCP 8080 and 9000 and UDP 60000 and 60001 on your home network.
 `}
@@ -59,7 +59,7 @@ ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" becau
    - Run "${t.exe} account <path to the account.dat>" (or "${t.exe} account new <name> <path to Cemu's mlc01>") so the account's
      player ID matches this server. Close Cemu first.
    - In Cemu: Options > General settings > Account > Network Service: Custom.
-   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; that route is only partly working: login and levels work, but a Normal 100 Mario Challenge can stop with error 104-1970.
+   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; it works on a tested console. The server answers only the game; the console's own programs are left alone.
 
 4. STOP IT
    Press Ctrl+C in the window. This saves the level list. Copy or move the "data" folder only while the server is stopped.
@@ -76,7 +76,7 @@ PLEASE KNOW
    - Levels are downloaded from volunteer-run public services (api.bobac-analytics.com and web.archive.org) at a low rate,
      from this computer's address. SMM_FETCH=0 turns that off.
    - Status: works in Cemu 2.6 (Course World, 100 Mario Challenge, creator Miis and names, clear screens). On a real
-     Wii U (Inkay) login and levels work, but error 104-1970 can stop a Normal challenge. Flags are a regional guess: the archive does not say where creators live.
+     Wii U (Aroma + Inkay) the game starts, logs in and plays levels. Flags are a regional guess: the archive does not say where creators live.
    - Licence: AGPL-3.0 (see LICENSE). If you pass this program on, you must also offer the source code.
 `;
 

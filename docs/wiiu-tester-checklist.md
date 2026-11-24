@@ -1,6 +1,6 @@
 # Wii U test: checklist and what to send back
 
-For someone trying [setup-wiiu.md](setup-wiiu.md) on a real console. It has been tried on one console (login and an Easy 100 Mario Challenge work; see the status in setup-wiiu.md), so the useful result is either "it works" or the exact place it stopped. Plan on an hour.
+For someone trying [setup-wiiu.md](setup-wiiu.md) on a real console. It has been tried on one console (see the status in setup-wiiu.md), so the useful result is either "it works" or the exact place it stopped. Plan on an hour.
 
 ## You need
 
@@ -14,14 +14,14 @@ This checks the part most likely to fail: the console's login through the proxy.
 
 1. On the PC: start the server with `SMM_TRACE=1` set (for example, add `SMM_TRACE=1` as a line in `data/settings.env` first), and run `smm-server account adopt "<account.dat from the Dumpling dump>"`. Allow TCP 8888, 8080, 9000 and UDP 60000, 60001 in the firewall.
 2. On the Wii U: set the connection's proxy to the PC's address and port 8888, as in the guide. Restart the console so Inkay starts ("Using Pretendo Network" appears).
-3. Make the console log in: open the **Friend List** from the Wii U Menu (it signs in to the network), or run the connection test in System Settings. Wait a minute.
+3. Make the game log in: start Super Mario Maker and open **Course World** (only games are answered by default; the console's own programs, such as the Friend List, are deliberately ignored). Wait a minute.
 4. In the server's `log` folder (newest file) look for lines starting with `proxy:` and `account`.
 
 Result:
 
-- **Passes:** you see `proxy: CONNECT account…` followed by `account … POST /v1/api/oauth20/access_token/generate -> 200`.
+- **Passes:** you see `proxy: CONNECT account…`, then `account … POST /v1/api/oauth20/access_token/generate -> 200` and `account: NEX token for "<name>" … game_server_id=1018DB00`, followed by `authentication request` lines. Lines saying `dropping … from the system title …` are normal.
 - **Fails at the secure connection:** `proxy: TLS handshake with the console failed`.
-- **Fails at the account service:** `account … -> 404` for some address, or no `account` line at all.
+- **Fails at the account service:** `account … -> 404` for some address, or no `account` line at all. The console's error code is in the table in setup-wiiu.md (102-2160: certificate, 102-2152: login never completed, 106-0112: game server unreachable, usually the firewall).
 
 ## Test 2: the game
 
