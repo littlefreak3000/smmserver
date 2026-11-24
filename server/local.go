@@ -40,8 +40,8 @@ import (
 //	SMM_S3_PORT       port of the built-in S3 (default 9000)
 //
 //	SMM_FETCH         fetch archived levels on demand from the public archive (default 1; 0 = fully offline)
-//	SMM_POOL_TARGET   levels to keep in each of 4 clear-rate bands, fetched in the background (default 25; 0 = none)
-//	SMM_POOL_GROW_EVERY / _GROW_BY / SMM_POOL_MAX  slow growth: every 10m add 1 level per band, up to 250 per band (0 = stop)
+//	SMM_POOL_TARGET   levels to keep in each of 4 clear-rate bands, fetched in the background (default 1000; 0 = none)
+//	SMM_POOL_GROW_EVERY / _GROW_BY / SMM_POOL_MAX  slow growth: every 10m add 1 level per band, up to 1000 per band (0 = stop)
 //	SMM_HISTORY_LEVELS  how many of each player's most recently played levels to remember so lists skip them (default 1000; off = none)
 //	SMM_FETCH_API / SMM_FETCH_WAYBACK  override the two upstream services
 //	SMM_BIND_HOST     bind the HTTP services (S3, account) to one address, e.g. 127.0.0.1 (default: all; the NEX UDP ports always bind all)
@@ -463,10 +463,10 @@ func startFetching() {
 	client := upstream.New(api, wayback, 0, 0)
 	client.Logf = func(f string, a ...any) { globals.Logger.Infof(f, a...) }
 
-	target, err := strconv.Atoi(getenv("SMM_POOL_TARGET", "25"))
+	target, err := strconv.Atoi(getenv("SMM_POOL_TARGET", "1000"))
 	if err != nil || target < 0 {
-		globals.Logger.Warningf("SMM_POOL_TARGET must be a number >= 0; using 25")
-		target = 25
+		globals.Logger.Warningf("SMM_POOL_TARGET must be a number >= 0; using 1000")
+		target = 1000
 	}
 
 	p := &pool.Pool{
@@ -549,10 +549,10 @@ func startFetching() {
 		growBy = 1
 	}
 
-	growMax, err := strconv.Atoi(getenv("SMM_POOL_MAX", "250"))
+	growMax, err := strconv.Atoi(getenv("SMM_POOL_MAX", "1000"))
 	if err != nil || growMax < 0 {
-		globals.Logger.Warningf("SMM_POOL_MAX must be a number >= 0; using 250")
-		growMax = 250
+		globals.Logger.Warningf("SMM_POOL_MAX must be a number >= 0; using 1000")
+		growMax = 1000
 	}
 
 	if target == 0 && (growEvery == 0 || growBy == 0) {
@@ -619,11 +619,11 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 # Fetch levels from the public archive (api.bobac-analytics.com and web.archive.org) while you play. 0 = fully offline.
 #SMM_FETCH=1
 # Levels to keep ready in each of 4 clear-rate bands (the first download takes roughly 5 minutes per 100 levels).
-#SMM_POOL_TARGET=25
+#SMM_POOL_TARGET=1000
 # Slow growth afterwards: add this many levels per band every so often, up to a maximum per band. SMM_POOL_GROW_EVERY=0 stops it.
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
-#SMM_POOL_MAX=250
+#SMM_POOL_MAX=1000
 # Where the pool's difficulty bands end, in percent clear rate. The pool keeps the same number of levels in every band, so
 # this decides how much stock each difficulty gets. 5,20,50 means the bands 0-5%, 5-20%, 20-50% and 50-100% (the default);
 # for example 10,30,60,85 makes five bands. Rising whole numbers from 1 to 99, at most 8. Does not change cache builds.

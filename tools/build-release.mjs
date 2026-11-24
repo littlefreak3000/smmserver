@@ -46,8 +46,9 @@ ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" becau
 ` : `   - If a firewall is active, allow TCP 8080 and 9000 and UDP 60000 and 60001 on your home network.
 `}
 2. LEAVE THE WINDOW OPEN
-   It prints a box saying the server is running and showing this computer's address. The first start downloads about 100
-   levels in the background (roughly 5 minutes); a few more arrive slowly while it keeps running.
+   It prints a box saying the server is running and showing this computer's address. The first start fills the level
+   pool in the background: lists work after a few minutes, and the full pool (1,000 levels per band, about 190 MB) takes
+   about 2 to 3 hours and resumes if you stop it. SMM_POOL_TARGET in the settings.env file of the data folder makes it smaller.
    Everything it needs is created next to the program in a folder called "data".
 
 3. CONNECT CEMU

@@ -8,7 +8,7 @@ Built: the index builder and sampler (`server/index`), stubs and lazy completion
 
 ## 1. Goal
 
-In pool mode the server can only pick random levels from a small local *pool*: about 100 levels on a new install, 404 in a larger test archive, at most about 1,000 by default. The real archive holds roughly 10 million levels. Index mode draws lists such as the 100 Mario Challenge and "random level of this difficulty" from **all** of them, while the server keeps downloading only the few levels a player opens.
+In pool mode the server can only pick random levels from a small local *pool*: 4,000 levels (1,000 per band) once a new install has filled, 404 in a larger test archive. The real archive holds roughly 10 million levels. Index mode draws lists such as the 100 Mario Challenge and "random level of this difficulty" from **all** of them, while the server keeps downloading only the few levels a player opens.
 
 Non-goals: storing every level file (about 470 GB), bulk-scraping the volunteer services, supporting real consoles.
 

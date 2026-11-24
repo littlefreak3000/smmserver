@@ -14,7 +14,7 @@ It was written from a working setup: Cemu 2.6 on Windows, game version v240 (USA
 ## 1. Start the server
 
 1. Unzip the server and run it (on Windows: double-click `smm-server.exe`; the first time Windows asks about the firewall, allow **Private networks**).
-2. Leave the window open. It prints a box with this PC's address and starts fetching about 100 levels in the background (roughly five minutes). More arrive slowly as long as it keeps running.
+2. Leave the window open. It prints a box with this PC's address and starts filling the level pool in the background: lists work after a few minutes, and the full pool (1,000 levels per band, about 190 MB) takes about 2 to 3 hours. It resumes if you stop the server. Set `SMM_POOL_TARGET` lower for a smaller, quicker first start.
 3. Everything it needs is created in a folder called `data` next to the program. `data/network_services.xml` is what Cemu needs in step 5.
 
 If you are not sure the right network address was picked, the box shows it; change it with `SMM_PUBLIC_HOST` in `data/settings.env` (an IPv4 address; Cemu allows at most 15 characters).
