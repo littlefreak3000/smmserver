@@ -323,6 +323,8 @@ func startConsoleProxy(account http.Handler) {
 		S3:      "127.0.0.1:" + getenv("SMM_S3_PORT", "9000"),
 		S3Port:  getenv("SMM_S3_PORT", "9000"),
 		Logf:    func(f string, a ...any) { globals.Tracef(f, a...) },
+		// * SMM_PROXY_SPOTPASS=1 (diagnostics only): let SpotPass connections in and log what they ask
+		ServeSpotPass: getenv("SMM_PROXY_SPOTPASS", "") == "1",
 	})
 	if err != nil {
 		globals.Logger.Warningf("Cannot set up the Wii U proxy: %s", err.Error())

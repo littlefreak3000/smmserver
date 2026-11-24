@@ -37,6 +37,10 @@ type Config struct {
 	// S3Port is the port that marks a request as meant for the S3 ("9000").
 	S3Port string
 	Logf   func(format string, args ...any)
+	// ServeSpotPass makes the proxy accept TLS connections for the SpotPass hosts (nppl, npts, ...) and answer 404, logging
+	// each request (for finding out what the console asks). Off by default: a console that is let in and then given nothing
+	// waits on it, while a refusal fails at once, as it does with no server at all.
+	ServeSpotPass bool
 }
 
 // Proxy is the HTTP proxy handler.
@@ -129,7 +133,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 	if !p.known(host) {
-		p.cfg.Logf("proxy: refused CONNECT %s (not a host the home server answers)", host)
+		if spotpass(host) {
+			p.cfg.Logf("proxy: refused CONNECT %s (SpotPass is not provided by the home server; the console fails at once)", host)
+		} else {
+			p.cfg.Logf("proxy: refused CONNECT %s (not a host the home server answers)", host)
+		}
 		http.Error(w, "not served here", http.StatusForbidden)
 
 		return
@@ -259,7 +267,7 @@ func (p *Proxy) known(hostport string) bool {
 
 	host = strings.ToLower(host)
 
-	return strings.Contains(host, "account.") || strings.Contains(host, "conntest") || spotpass(host) || (p.s3 != nil && port == p.cfg.S3Port)
+	return strings.Contains(host, "account.") || strings.Contains(host, "conntest") || (spotpass(host) && p.cfg.ServeSpotPass) || (p.s3 != nil && port == p.cfg.S3Port)
 }
 
 // spotpass says whether a host is one of the Wii U's SpotPass (BOSS) services: the policy list (nppl), task lists (npts),

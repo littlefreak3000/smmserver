@@ -129,7 +129,8 @@ func TestSpotPassRequestsAreLoggedAndAnswered404(t *testing.T) {
 	)
 
 	p, err := consoleproxy.New(consoleproxy.Config{
-		Account: http.NotFoundHandler(),
+		Account:       http.NotFoundHandler(),
+		ServeSpotPass: true,
 		Logf: func(f string, a ...any) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -196,7 +197,8 @@ func TestAConnectionWithoutAnUnderstoodRequestIsLogged(t *testing.T) {
 	)
 
 	p, err := consoleproxy.New(consoleproxy.Config{
-		Account: http.NotFoundHandler(),
+		Account:       http.NotFoundHandler(),
+		ServeSpotPass: true,
 		Logf: func(f string, a ...any) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -293,5 +295,51 @@ func TestLongRequestsArriveWholeThroughTheLoggingWrapper(t *testing.T) {
 		if want := fmt.Sprintf("header=900 body=%d", n); string(got) != want {
 			t.Fatalf("%d byte body: got %q, want %q", n, got, want)
 		}
+	}
+}
+
+// * by default a CONNECT to a SpotPass host is refused at once, like a proxy that cannot reach it: a console that is let in
+// * and then given nothing waits for it (the game sat on its loading screen), a refusal fails immediately
+func TestSpotPassConnectIsRefusedByDefault(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+
+	p, err := consoleproxy.New(consoleproxy.Config{
+		Account: http.NotFoundHandler(),
+		Logf: func(f string, a ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+
+			lines = append(lines, fmt.Sprintf(f, a...))
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(p)
+	t.Cleanup(srv.Close)
+
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer conn.Close()
+
+	fmt.Fprint(conn, "CONNECT nppl.app.pretendo.cc:443 HTTP/1.1\r\nHost: nppl.app.pretendo.cc:443\r\n\r\n")
+
+	status, _ := bufio.NewReader(conn).ReadString('\n')
+	if !strings.Contains(status, "403") {
+		t.Fatalf("CONNECT to a SpotPass host answered %q, want a 403", status)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if all := strings.Join(lines, "\n"); !strings.Contains(all, "refused CONNECT nppl.app.pretendo.cc:443 (SpotPass") {
+		t.Fatalf("no log line for the refusal:\n%s", all)
 	}
 }
