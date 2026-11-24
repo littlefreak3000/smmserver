@@ -41,6 +41,10 @@ type Config struct {
 	// each request (for finding out what the console asks). Off by default: a console that is let in and then given nothing
 	// waits on it, while a refusal fails at once, as it does with no server at all.
 	ServeSpotPass bool
+	// AnswerRefusals makes a request for a host the proxy does not serve get an HTTP error (403 for a CONNECT, 404 for a plain
+	// request). Off by default: the connection is dropped instead, which is what a console sees when the proxy cannot reach
+	// the host (or is not there at all). An answer, even an error, made the console's launch of a game stall.
+	AnswerRefusals bool
 }
 
 // Proxy is the HTTP proxy handler.
@@ -138,7 +142,7 @@ func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 		} else {
 			p.cfg.Logf("proxy: refused CONNECT %s (not a host the home server answers)", host)
 		}
-		http.Error(w, "not served here", http.StatusForbidden)
+		p.refuse(w, "not served here", http.StatusForbidden)
 
 		return
 	}
@@ -308,6 +312,26 @@ func (p *Proxy) logRequest(r *http.Request, hostport string) {
 	p.cfg.Logf("proxy: SpotPass request %s %s%s (body %d bytes) headers:%s", r.Method, hostport, r.URL.RequestURI(), r.ContentLength, b.String())
 }
 
+// refuse ends a request for something the home server does not serve: by default the connection is reset without any
+// reply, like an unreachable host; with AnswerRefusals the client gets an HTTP error.
+func (p *Proxy) refuse(w http.ResponseWriter, msg string, status int) {
+	if !p.cfg.AnswerRefusals {
+		if hj, ok := w.(http.Hijacker); ok {
+			if c, _, err := hj.Hijack(); err == nil {
+				if tc, ok := c.(*net.TCPConn); ok {
+					tc.SetLinger(0) //nolint:errcheck
+				}
+
+				c.Close()
+
+				return
+			}
+		}
+	}
+
+	http.Error(w, msg, status)
+}
+
 func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
@@ -330,7 +354,7 @@ func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 		http.Error(w, "not found", http.StatusNotFound)
 	default:
 		p.cfg.Logf("proxy: no answer for %s (the home server does not stand in for it)", hostport)
-		http.Error(w, "not served by the home server", http.StatusNotFound)
+		p.refuse(w, "not served by the home server", http.StatusNotFound)
 	}
 }
 

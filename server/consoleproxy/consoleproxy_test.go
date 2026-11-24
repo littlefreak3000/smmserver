@@ -94,8 +94,10 @@ func TestConnectionTestAndOwnDownloadsAndRefusals(t *testing.T) {
 	}
 
 	// * anything else is not forwarded: not an open proxy
-	if code, _, _ := get(t, c, "http://example.com/"); code != http.StatusNotFound {
-		t.Fatalf("plain request to another host: %d", code)
+	// * and the connection is dropped without an answer, as if the host could not be reached
+	if resp, err := c.Get("http://example.com/"); err == nil {
+		resp.Body.Close()
+		t.Fatalf("plain request to another host got an answer: %d", resp.StatusCode)
 	}
 
 	if _, err := c.Get("https://example.com/"); err == nil {
@@ -300,7 +302,7 @@ func TestLongRequestsArriveWholeThroughTheLoggingWrapper(t *testing.T) {
 
 // * by default a CONNECT to a SpotPass host is refused at once, like a proxy that cannot reach it: a console that is let in
 // * and then given nothing waits for it (the game sat on its loading screen), a refusal fails immediately
-func TestSpotPassConnectIsRefusedByDefault(t *testing.T) {
+func TestSpotPassConnectIsDroppedByDefault(t *testing.T) {
 	var (
 		mu    sync.Mutex
 		lines []string
@@ -331,9 +333,10 @@ func TestSpotPassConnectIsRefusedByDefault(t *testing.T) {
 
 	fmt.Fprint(conn, "CONNECT nppl.app.pretendo.cc:443 HTTP/1.1\r\nHost: nppl.app.pretendo.cc:443\r\n\r\n")
 
-	status, _ := bufio.NewReader(conn).ReadString('\n')
-	if !strings.Contains(status, "403") {
-		t.Fatalf("CONNECT to a SpotPass host answered %q, want a 403", status)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+	if status, _ := bufio.NewReader(conn).ReadString('\n'); status != "" {
+		t.Fatalf("CONNECT to a SpotPass host was answered with %q; the connection should be dropped", status)
 	}
 
 	mu.Lock()
