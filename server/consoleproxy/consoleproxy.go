@@ -8,6 +8,7 @@
 package consoleproxy
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -48,6 +49,13 @@ type Config struct {
 	// DropAll (diagnostics) resets every connection to the proxy port at once, serving nothing, to tell a console that
 	// stalls on what the proxy answers from one that stalls on a proxy being reachable at all.
 	DropAll bool
+	// Pretendo lets the console's own programs (system titles) keep talking to the real Pretendo Network through the proxy: their
+	// account requests are forwarded, and other hosts under pretendo.cc are tunnelled through, so the rest of the console still
+	// behaves as if Pretendo were connected and only games are answered by the home server. See upstream.go.
+	Pretendo bool
+	// UpstreamDial and UpstreamTLS replace how the real hosts are reached (for tests); nil means the normal network.
+	UpstreamDial func(ctx context.Context, network, addr string) (net.Conn, error)
+	UpstreamTLS  *tls.Config
 }
 
 // Proxy is the HTTP proxy handler.
@@ -155,6 +163,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
+	if !p.known(host) && p.cfg.Pretendo && pretendoHost(host) {
+		p.tunnel(w, r)
+
+		return
+	}
+
 	if !p.known(host) {
 		if spotpass(host) {
 			p.cfg.Logf("proxy: refused CONNECT %s (SpotPass is not provided by the home server; the console fails at once)", host)
@@ -361,6 +375,12 @@ func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 
 	switch {
 	case strings.Contains(host, "account."):
+		if p.cfg.Pretendo && pretendoHost(host) && systemTitle(r.Header.Get("X-Nintendo-Title-ID")) {
+			p.forwardAccount(w, r, hostport)
+
+			return
+		}
+
 		p.cfg.Account.ServeHTTP(w, r)
 	case strings.Contains(host, "conntest"):
 		w.Header().Set("X-Organization", "Nintendo")
@@ -372,6 +392,12 @@ func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 		p.logRequest(r, hostport)
 		http.Error(w, "not found", http.StatusNotFound)
 	default:
+		if p.cfg.Pretendo && pretendoHost(hostport) && r.URL.IsAbs() {
+			p.forwardPlain(w, r, hostport)
+
+			return
+		}
+
 		p.cfg.Logf("proxy: no answer for %s (the home server does not stand in for it)", hostport)
 		p.refuse(w, "not served by the home server", http.StatusNotFound)
 	}

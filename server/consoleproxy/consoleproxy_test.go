@@ -2,6 +2,7 @@ package consoleproxy_test
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -344,5 +345,185 @@ func TestSpotPassConnectIsDroppedByDefault(t *testing.T) {
 
 	if all := strings.Join(lines, "\n"); !strings.Contains(all, "refused CONNECT nppl.app.pretendo.cc:443 (SpotPass") {
 		t.Fatalf("no log line for the refusal:\n%s", all)
+	}
+}
+
+// * Pretendo pass-through (opt-in): system titles reach the real Pretendo, games are answered here
+
+type fakePretendo struct {
+	proxy *httptest.Server
+	hosts []string // addresses the proxy was asked to reach
+	mu    sync.Mutex
+}
+
+func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) {
+	t.Helper()
+
+	f := &fakePretendo{}
+
+	// * the "real" account server (TLS) and a TCP echo for tunnelled connections
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "upstream:%s:%s", r.Host, r.URL.Path)
+	}))
+	t.Cleanup(upstream.Close)
+
+	echo, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { echo.Close() })
+
+	go func() {
+		for {
+			c, err := echo.Accept()
+			if err != nil {
+				return
+			}
+
+			go func() { io.Copy(c, c); c.Close() }() //nolint:errcheck
+		}
+	}()
+
+	account := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "account:"+r.Host+r.URL.Path)
+	})
+
+	p, err := consoleproxy.New(consoleproxy.Config{
+		Account:     account,
+		Pretendo:    pretendo,
+		UpstreamTLS: &tls.Config{InsecureSkipVerify: true},
+		UpstreamDial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			f.mu.Lock()
+			f.hosts = append(f.hosts, addr)
+			f.mu.Unlock()
+
+			target := echo.Addr().String()
+			if strings.HasPrefix(addr, "account.") {
+				target = strings.TrimPrefix(upstream.URL, "https://")
+			}
+
+			var d net.Dialer
+
+			return d.DialContext(ctx, network, target)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.proxy = httptest.NewServer(p)
+	t.Cleanup(f.proxy.Close)
+
+	proxyURL, _ := url.Parse(f.proxy.URL)
+
+	return f, &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, MaxVersion: tls.VersionTLS10, CipherSuites: []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA}},
+	}}
+}
+
+func getWithTitle(t *testing.T, c *http.Client, u, title string) string {
+	t.Helper()
+
+	req, _ := http.NewRequest("GET", u, nil)
+	if title != "" {
+		req.Header.Set("X-Nintendo-Title-ID", title)
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s (title %q): %v", u, title, err)
+	}
+
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
+	return string(b)
+}
+
+func TestPretendoModeSplitsTheAccountServiceByTitle(t *testing.T) {
+	_, c := newFakePretendo(t, true)
+
+	u := "https://account.pretendo.cc/v1/api/people/@me/profile"
+
+	for title, want := range map[string]string{
+		"0005001010040100": "upstream:account.pretendo.cc:/v1/api/people/@me/profile", // Wii U Menu
+		"0005001010001C00": "upstream:account.pretendo.cc:/v1/api/people/@me/profile", // friend list
+		"000500301001610A": "upstream:account.pretendo.cc:/v1/api/people/@me/profile", // Miiverse
+		"000500001018DC00": "account:account.pretendo.cc/v1/api/people/@me/profile",   // the game
+		"":                 "account:account.pretendo.cc/v1/api/people/@me/profile",   // no title
+	} {
+		if got := getWithTitle(t, c, u, title); got != want {
+			t.Fatalf("title %q: got %q, want %q", title, got, want)
+		}
+	}
+}
+
+func TestWithoutPretendoModeEveryTitleIsAnsweredHere(t *testing.T) {
+	f, c := newFakePretendo(t, false)
+
+	if got := getWithTitle(t, c, "https://account.pretendo.cc/x", "0005001010040100"); got != "account:account.pretendo.cc/x" {
+		t.Fatalf("got %q", got)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.hosts) != 0 {
+		t.Fatalf("the proxy contacted %v with the pass-through off", f.hosts)
+	}
+}
+
+func TestPretendoModeTunnelsOtherPretendoHostsAndOnlyThose(t *testing.T) {
+	f, _ := newFakePretendo(t, true)
+
+	open := func(host string) (net.Conn, *bufio.Reader, string) {
+		conn, err := net.Dial("tcp", strings.TrimPrefix(f.proxy.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", host, host)
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+		br := bufio.NewReader(conn)
+		status, _ := br.ReadString('\n')
+
+		return conn, br, status
+	}
+
+	// * a Pretendo host that the home server does not serve: bytes go to the real host and back untouched
+	conn, br, status := open("nppl.app.pretendo.cc:443")
+	defer conn.Close()
+
+	if !strings.Contains(status, "200") {
+		t.Fatalf("CONNECT answered %q", status)
+	}
+
+	br.ReadString('\n') // blank line
+
+	fmt.Fprint(conn, "hello\n")
+
+	if line, _ := br.ReadString('\n'); line != "hello\n" {
+		t.Fatalf("tunnel returned %q", line)
+	}
+
+	// * a host outside pretendo.cc is not tunnelled
+	other, _, status2 := open("example.com:443")
+	defer other.Close()
+
+	if status2 != "" {
+		t.Fatalf("CONNECT to example.com answered %q; it must be dropped", status2)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, h := range f.hosts {
+		if strings.Contains(h, "example.com") {
+			t.Fatalf("the proxy contacted %s", h)
+		}
 	}
 }

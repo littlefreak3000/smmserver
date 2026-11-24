@@ -331,6 +331,9 @@ func startConsoleProxy(account http.Handler) {
 		AnswerRefusals: getenv("SMM_PROXY_ANSWER", "") == "1",
 		// * SMM_PROXY_DROP_ALL=1 (diagnostics only): reset every connection to the proxy port
 		DropAll: getenv("SMM_PROXY_DROP_ALL", "") == "1",
+		// * SMM_PROXY_PRETENDO=1: the console's own programs keep using the real Pretendo Network through the proxy (needs a
+		// * Pretendo account on the console); only games are answered here
+		Pretendo: getenv("SMM_PROXY_PRETENDO", "") == "1",
 	})
 	if err != nil {
 		globals.Logger.Warningf("Cannot set up the Wii U proxy: %s", err.Error())
