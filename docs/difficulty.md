@@ -78,6 +78,15 @@ So a list for a range is mostly its own levels, with a few levels from next door
 
 An index built with a prior is drawn this way and an index built without is not, so **the prior is part of the index's fingerprint**, and with it of every challenge code: two players whose codes match drew from the same kind of index. An index without a prior keeps the fingerprint it always had.
 
+## Filtering out the easiest levels
+
+`SMM_DIFFICULTY_CEILING` (percent, 1 to 100, default 100) sets the highest difficulty score a level may have. Below 100 it does two things:
+
+- the pool's top band ends there instead of at 100 %, so a level whose score is above it belongs to no band and is never downloaded;
+- every difficulty request is cut off at the ceiling: a range that reaches past it stops there, "all difficulties" becomes 0 to the ceiling, and a range wholly above it (Easy, 66-100 %, under a ceiling of 60) gets the easiest levels that are allowed. The neighbouring-range rule above cannot reach past it either. Levels already in the catalog above the ceiling stay in the files but are not offered in difficulty lists.
+
+It applies to the difficulty lists only (the 100 Mario Challenge and the difficulty filter). The newest and most-starred lists, and the whole-archive index (where the neighbouring-range rule can still reach a few points above), are not filtered. The ceiling must lie above the start of the pool's top band (50 % by default, see `SMM_POOL_BANDS` in the README).
+
 ## Settings
 
 `SMM_DIFFICULTY_PRIOR` in `data/settings.env`:

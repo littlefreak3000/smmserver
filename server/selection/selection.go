@@ -57,6 +57,7 @@ type Selector struct {
 	Index         *index.Index // nil: pool mode
 	Seeds         Seeds        // nil: never seeded
 	DifficultyApp uint32       // the ranking that carries the clear rate in percent (index mode answers only this one)
+	Ceiling       int          // percent: difficulty lists never offer a level above it (0, or 100 and up, means no ceiling)
 
 	Stub     func(upstream.Level) error // lists a level in the catalog before its file is downloaded
 	Prefetch func(ids ...int64)         // queues background downloads, in order
@@ -180,6 +181,13 @@ func FailureToClear(minFailure, maxFailure int64) (int64, int64) {
 // caller should use its own database query (an unseeded request in pool mode, an empty range, a ranking the index does
 // not cover).
 func (s *Selector) IDs(q Query) (ids []int64, handled bool, err error) {
+	// * a ceiling below 100 cuts every difficulty request off at that clear rate: a range wholly above it gets the easiest
+	// * levels that are allowed
+	if s.ceilingOn() && q.Kind == Random && q.App == s.DifficultyApp {
+		q.Max = min(q.Max, int64(s.Ceiling))
+		q.Min = min(q.Min, q.Max)
+	}
+
 	seed := s.Seed(q.NNID)
 
 	switch q.Kind {
@@ -263,6 +271,8 @@ func (s *Selector) indexList(q Query) ([]int64, bool, error) {
 	return s.register(kept), true, nil
 }
 
+func (s *Selector) ceilingOn() bool { return s.Ceiling > 0 && s.Ceiling < 100 }
+
 func (s *Selector) skip(id int64) bool { return s.Dead != nil && s.Dead(id) }
 
 // register lists the chosen levels in the catalog and queues their downloads.
@@ -317,6 +327,11 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 	if soft {
 		lo, hi := difficulty.Window(int(q.Min), int(q.Max))
 		qLo, qHi = int64(lo), int64(hi)
+	}
+
+	// * the neighbouring-range window must not reach above the ceiling either
+	if s.ceilingOn() && q.App == s.DifficultyApp {
+		qHi = min(qHi, int64(s.Ceiling))
 	}
 
 	rows, err := s.DB.Query(`

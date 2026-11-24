@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -468,15 +469,33 @@ func startFetching() {
 		Logf:   func(f string, a ...any) { globals.Logger.Infof(f, a...) },
 	}
 
-	// * SMM_POOL_BANDS: where the pool's bands end, in percent (default 5,20,50 = 0-5%, 5-20%, 20-50%, 50-100%)
-	if raw := getenv("SMM_POOL_BANDS", ""); raw != "" {
-		bands, err := pool.ParseBands(raw)
-		if err != nil {
-			globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
-		} else {
-			p.Bands = bands
-			globals.Logger.Infof("Level pool bands (SMM_POOL_BANDS=%s): %d bands, %d levels each", raw, len(bands), target)
+	// * SMM_POOL_BANDS: where the pool's bands end, in percent (default 5,20,50 = 0-5%, 5-20%, 20-50%, 50-100%);
+	// * SMM_DIFFICULTY_CEILING cuts the top band off below 100%
+	if raw, ceil := getenv("SMM_POOL_BANDS", ""), difficultyCeiling(); raw != "" || ceil < 100 {
+		bands := append([]pool.Band(nil), pool.DefaultBands...)
+
+		if raw != "" {
+			if parsed, err := pool.ParseBands(raw); err != nil {
+				globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
+			} else {
+				bands = parsed
+			}
 		}
+
+		if capped, err := pool.WithCeiling(bands, ceil); err != nil {
+			globals.Logger.Warningf("SMM_DIFFICULTY_CEILING: %v; no ceiling is applied to the pool", err)
+		} else {
+			bands = capped
+		}
+
+		p.Bands = bands
+
+		names := make([]string, len(bands))
+		for i, b := range bands {
+			names[i] = b.Name
+		}
+
+		globals.Logger.Infof("Level pool bands: %s, %d levels each", strings.Join(names, ", "), target)
 	}
 
 	database.OnMissing = p.OnMissing
@@ -541,6 +560,37 @@ func startFetching() {
 	go p.Maintain(context.Background(), pool.Growth{Every: growEvery, By: growBy, Max: growMax})
 }
 
+var (
+	ceilingOnce sync.Once
+	ceilingPct  = 100
+)
+
+// difficultyCeiling reads SMM_DIFFICULTY_CEILING: the highest clear rate, in percent, a level may have to be stocked and
+// offered in difficulty lists. 100 (the default) means no ceiling; a lower value filters out the levels that are too easy.
+func difficultyCeiling() int {
+	ceilingOnce.Do(func() {
+		raw := strings.TrimSpace(getenv("SMM_DIFFICULTY_CEILING", ""))
+		if raw == "" {
+			return
+		}
+
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 {
+			globals.Logger.Warningf("SMM_DIFFICULTY_CEILING must be a whole number from 1 to 100; using 100 (no ceiling)")
+
+			return
+		}
+
+		ceilingPct = n
+
+		if n < 100 {
+			globals.Logger.Infof("Difficulty ceiling: levels with a clear rate above %d%% are not stocked and not offered in difficulty lists (SMM_DIFFICULTY_CEILING)", n)
+		}
+	})
+
+	return ceilingPct
+}
+
 func hostOf(raw string) string {
 	if i := strings.Index(raw, "://"); i >= 0 {
 		raw = raw[i+3:]
@@ -572,6 +622,9 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 # this decides how much stock each difficulty gets. 5,20,50 means the bands 0-5%, 5-20%, 20-50% and 50-100% (the default);
 # for example 10,30,60,85 makes five bands. Rising whole numbers from 1 to 99, at most 8. Does not change cache builds.
 #SMM_POOL_BANDS=5,20,50
+# Highest clear rate (percent) a level may have to be kept and offered in difficulty lists. 100 = no ceiling. Set it lower, for
+# example 80, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists skip any it holds.
+#SMM_DIFFICULTY_CEILING=100
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
 # Wii U with Inkay: by default only the game is answered and the console's own programs (Wii U Menu, friends, Miiverse) are left

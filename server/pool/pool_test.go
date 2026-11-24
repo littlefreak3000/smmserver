@@ -17,6 +17,7 @@ import (
 	datastore_db "github.com/PretendoNetwork/super-mario-maker/database/datastore"
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 	"github.com/PretendoNetwork/super-mario-maker/levelimport"
+	"github.com/PretendoNetwork/super-mario-maker/difficulty"
 	"github.com/PretendoNetwork/super-mario-maker/pool"
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
@@ -633,5 +634,63 @@ func TestACustomBandListIsStockedAndCounted(t *testing.T) {
 		if c < 3 {
 			t.Fatalf("band %d holds %d levels, want at least 3 (%v)", i, c, counts)
 		}
+	}
+}
+
+func TestWithCeilingCutsTheTopBandOff(t *testing.T) {
+	cut, err := pool.WithCeiling(pool.DefaultBands, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	last := cut[len(cut)-1]
+	if last.Min != 0.5 || last.Max < 0.8 || last.Max > 0.80001 || last.Name != "50-80%" {
+		t.Fatalf("top band = %+v", last)
+	}
+
+	if pool.DefaultBands[3].Max != 1.0000001 {
+		t.Fatal("WithCeiling changed the default bands")
+	}
+
+	for _, pct := range []int{100, 250} {
+		same, err := pool.WithCeiling(pool.DefaultBands, pct)
+		if err != nil || same[3] != pool.DefaultBands[3] {
+			t.Fatalf("ceiling %d changed the bands: %v %v", pct, same, err)
+		}
+	}
+
+	for _, pct := range []int{50, 49, 1} {
+		if _, err := pool.WithCeiling(pool.DefaultBands, pct); err == nil {
+			t.Fatalf("a ceiling of %d is not above the top band's start but was accepted", pct)
+		}
+	}
+}
+
+func TestACeilingStopsThePoolFromKeepingTooEasyLevels(t *testing.T) {
+	f := newFake(t)
+	p, db := setup(t, f)
+
+	bands, err := pool.WithCeiling(pool.DefaultBands, 90)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// * the bands 0-5, 5-20, 20-50 and 50-90: a level easier than 90 % belongs to none and is never downloaded
+	p.Bands = bands
+	p.TargetPerBand = 6
+
+	if _, err := p.Fill(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	var above int
+
+	score := difficulty.Current.SQL("clear_rate", "attempts")
+	if err := db.QueryRow(`SELECT COUNT(*) FROM datastore.level_sources WHERE attempts > 0 AND `+score+` > 0.9000001`).Scan(&above); err != nil {
+		t.Fatal(err)
+	}
+
+	if above != 0 {
+		t.Fatalf("%d levels above the ceiling were kept", above)
 	}
 }

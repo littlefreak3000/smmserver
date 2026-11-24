@@ -87,6 +87,26 @@ func ParseBands(s string) ([]Band, error) {
 	return append(bands, Band{fmt.Sprintf("%d-100%%", lo), float64(lo) / 100, 1.0000001}), nil
 }
 
+// WithCeiling returns the bands with the top one cut off at pct percent: levels whose difficulty score is above it belong to
+// no band, so the pool never downloads them. 100 (or more) leaves the bands as they are. The ceiling is inclusive and has to
+// lie above the bottom of the top band.
+func WithCeiling(bands []Band, pct int) ([]Band, error) {
+	out := append([]Band(nil), bands...)
+	if pct >= 100 || len(out) == 0 {
+		return out, nil
+	}
+
+	last := len(out) - 1
+	if float64(pct)/100 <= out[last].Min {
+		return nil, fmt.Errorf("a ceiling of %d%% is not above the start of the top band (%.0f%%)", pct, out[last].Min*100)
+	}
+
+	// * a little above pct so a score of exactly pct is still inside
+	out[last] = Band{fmt.Sprintf("%.0f-%d%%", out[last].Min*100, pct), out[last].Min, float64(pct)/100 + 0.0000001}
+
+	return out, nil
+}
+
 // ErrMaxDraws means Fill used up its draw budget before every band was full.
 var ErrMaxDraws = errors.New("pool: draw budget used up before every band was full")
 

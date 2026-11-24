@@ -207,7 +207,7 @@ func startSelection() {
 	applyCacheToSeeds(store)
 
 	sel := &selection.Selector{
-		DB: database.DB, Index: archiveIdx, Seeds: store, DifficultyApp: 300000000,
+		DB: database.DB, Index: archiveIdx, Seeds: store, DifficultyApp: 300000000, Ceiling: difficultyCeiling(),
 		Logf: func(f string, a ...any) { globals.Logger.Infof(f, a...) },
 	}
 
