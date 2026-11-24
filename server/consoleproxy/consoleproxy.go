@@ -45,6 +45,9 @@ type Config struct {
 	// request). Off by default: the connection is dropped instead, which is what a console sees when the proxy cannot reach
 	// the host (or is not there at all). An answer, even an error, made the console's launch of a game stall.
 	AnswerRefusals bool
+	// DropAll (diagnostics) resets every connection to the proxy port at once, serving nothing, to tell a console that
+	// stalls on what the proxy answers from one that stalls on a proxy being reachable at all.
+	DropAll bool
 }
 
 // Proxy is the HTTP proxy handler.
@@ -122,6 +125,22 @@ func (p *Proxy) tlsConfig() *tls.Config {
 
 // ServeHTTP handles proxy requests (CONNECT and absolute URLs) and says what this port is for to anyone else.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.cfg.DropAll {
+		p.cfg.Logf("proxy: DROP_ALL: dropped %s %s", r.Method, r.Host)
+
+		if hj, ok := w.(http.Hijacker); ok {
+			if c, _, err := hj.Hijack(); err == nil {
+				if tc, ok := c.(*net.TCPConn); ok {
+					tc.SetLinger(0) //nolint:errcheck
+				}
+
+				c.Close()
+
+				return
+			}
+		}
+	}
+
 	switch {
 	case r.Method == http.MethodConnect:
 		p.connect(w, r)

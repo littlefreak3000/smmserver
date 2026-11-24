@@ -271,6 +271,8 @@ func startHomeAccount() {
 			return password, nil
 		},
 		Logf: func(f string, a ...any) { globals.Logger.Infof(f, a...) },
+		// * SMM_ACCOUNT_SYSTEM_TITLES=1: answer the console's system programs too (the default drops them; see homeaccount.Config)
+		AnswerSystemTitles: getenv("SMM_ACCOUNT_SYSTEM_TITLES", "") == "1",
 	})
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(os.Getenv("SMM_BIND_HOST"), port))
@@ -327,6 +329,8 @@ func startConsoleProxy(account http.Handler) {
 		ServeSpotPass: getenv("SMM_PROXY_SPOTPASS", "") == "1",
 		// * SMM_PROXY_ANSWER=1: answer hosts the server does not serve with HTTP errors instead of dropping the connection
 		AnswerRefusals: getenv("SMM_PROXY_ANSWER", "") == "1",
+		// * SMM_PROXY_DROP_ALL=1 (diagnostics only): reset every connection to the proxy port
+		DropAll: getenv("SMM_PROXY_DROP_ALL", "") == "1",
 	})
 	if err != nil {
 		globals.Logger.Warningf("Cannot set up the Wii U proxy: %s", err.Error())

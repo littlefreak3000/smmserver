@@ -462,13 +462,19 @@ func TestLoginExtras(t *testing.T) {
 		t.Fatalf("profile = %+v (pid %d)", p, pid)
 	}
 
-	// * the console's friend list service gets a quick refusal, not a token for a server that cannot answer it
-	freq, _ := http.NewRequest("GET", e.srv.URL+"/v1/api/provider/nex_token/@me?game_server_id=00003200", nil)
-	freq.Header.Set("Authorization", "Bearer "+access)
+	// * the console's own programs (Wii U Menu, friend list, Miiverse) get no answer, games and Cemu (no title) do
+	for title, answered := range map[string]bool{"0005001010040100": false, "0005001010001C00": false, "000500301001610A": false, "000500001018DC00": true} {
+		sreq, _ := http.NewRequest("GET", e.srv.URL+"/v1/api/admin/time", nil)
+		sreq.Header.Set("X-Nintendo-Title-ID", title)
 
-	if fresp, ferr := http.DefaultClient.Do(freq); ferr == nil {
-		fresp.Body.Close()
-		t.Fatalf("friends nex_token got an answer (%d); the connection should be dropped", fresp.StatusCode)
+		sresp, serr := http.DefaultClient.Do(sreq)
+		if serr == nil {
+			sresp.Body.Close()
+		}
+
+		if answered != (serr == nil) {
+			t.Fatalf("title %s: answered=%v, want %v (err %v)", title, serr == nil, answered, serr)
+		}
 	}
 
 	// * the address counts as confirmed, so the Wii U Menu never offers to resend a confirmation

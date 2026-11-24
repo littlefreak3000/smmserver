@@ -46,6 +46,11 @@ type Config struct {
 	SystemType    uint8         // 1 = Wii U (default), 2 = 3DS
 	Logf          func(format string, args ...any)
 	Now           func() time.Time
+	// AnswerSystemTitles makes the service answer the Wii U's own programs (the Wii U Menu, the friend list, Miiverse: titles
+	// 00050010... and 00050030...) like a game. By default their requests are dropped. A console that is logged in for
+	// its system programs starts background services (friends, shop, Miiverse) this server cannot provide, and then the
+	// launch of a game stalls on them; with only the game answered the console behaves as if offline until the game asks.
+	AnswerSystemTitles bool
 }
 
 type nexToken struct { // must match common_globals.NEXToken byte for byte
@@ -128,6 +133,12 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(c int) { w.status = c; w.ResponseWriter.WriteHeader(c) }
 
 func (s *Service) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	if title := strings.ToUpper(r.Header.Get("X-Nintendo-Title-ID")); title != "" && !s.cfg.AnswerSystemTitles && isWiiUSystemTitle(title) {
+		s.cfg.Logf("account: dropping %s %s from the system title %s (only games are answered; see Config.AnswerSystemTitles)", r.Method, r.URL.Path, title)
+
+		panic(http.ErrAbortHandler)
+	}
+
 	w := &statusWriter{ResponseWriter: rw, status: 200}
 	defer func() {
 		s.cfg.Logf("account %s %s %s -> %d (title %s)", r.RemoteAddr, r.Method, r.URL.RequestURI(), w.status, r.Header.Get("X-Nintendo-Title-ID"))
@@ -368,8 +379,12 @@ func (s *Service) oauth(w http.ResponseWriter, r *http.Request) {
 		s.accessToken("access", nnid, expires), s.accessToken("refresh", nnid, 30*24*time.Hour), int(expires.Seconds())))
 }
 
-// friendsGameServerID is the game server ID of the Wii U's friend list service (title 0005001010001C00).
-const friendsGameServerID = "00003200"
+// isWiiUSystemTitle says whether a title ID belongs to one of the Wii U's own programs: system apps (00050010..., such as
+// the Wii U Menu and the friend list) and system applets (00050030..., such as Miiverse). Games are 00050000...; 3DS
+// titles are 0004....
+func isWiiUSystemTitle(title string) bool {
+	return strings.HasPrefix(title, "0005001") || strings.HasPrefix(title, "0005003")
+}
 
 func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	nnid, ok := s.bearer(r)
@@ -382,17 +397,6 @@ func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	if gameServerID == "" {
 		writeError(w, 200, "0118", "Unique ID and Game Server ID are not linked")
 		return
-	}
-
-	// * The console's friend list service (game server 00003200) logs in the same way. This server has no friends server,
-	// * so it says so at once; a token for a server that cannot answer would leave the console's friends service, and
-	// * whatever waits for it, stuck.
-	if strings.EqualFold(gameServerID, friendsGameServerID) {
-		// * An error reply was not enough: the console's launch of a game still stalled. With no server at all the request
-		// * fails as a dropped connection and the game starts, so the connection is dropped here without any reply.
-		s.cfg.Logf("account: dropping the friend list service's NEX token request from %q (this server has no friends server)", nnid)
-
-		panic(http.ErrAbortHandler)
 	}
 
 	pid, err := s.PIDFor(nnid)
