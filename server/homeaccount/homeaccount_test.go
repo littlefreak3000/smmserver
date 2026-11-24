@@ -462,6 +462,11 @@ func TestLoginExtras(t *testing.T) {
 		t.Fatalf("profile = %+v (pid %d)", p, pid)
 	}
 
+	// * the console's friend list service gets a quick refusal, not a token for a server that cannot answer it
+	if fcode, fbody := e.do(t, "GET", "/v1/api/provider/nex_token/@me?game_server_id=00003200", auth, nil); fcode != 400 || !strings.Contains(fbody, "<code>0118</code>") {
+		t.Fatalf("friends nex_token: %d %s", fcode, fbody)
+	}
+
 	// * the address counts as confirmed, so the Wii U Menu never offers to resend a confirmation
 	if !strings.Contains(body, "<validated>Y</validated>") || !strings.Contains(body, "<reachable>Y</reachable>") {
 		t.Fatalf("profile email is not confirmed: %s", body)

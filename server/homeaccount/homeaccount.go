@@ -368,6 +368,9 @@ func (s *Service) oauth(w http.ResponseWriter, r *http.Request) {
 		s.accessToken("access", nnid, expires), s.accessToken("refresh", nnid, 30*24*time.Hour), int(expires.Seconds())))
 }
 
+// friendsGameServerID is the game server ID of the Wii U's friend list service (title 0005001010001C00).
+const friendsGameServerID = "00003200"
+
 func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	nnid, ok := s.bearer(r)
 	if !ok {
@@ -378,6 +381,16 @@ func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	gameServerID := r.URL.Query().Get("game_server_id")
 	if gameServerID == "" {
 		writeError(w, 200, "0118", "Unique ID and Game Server ID are not linked")
+		return
+	}
+
+	// * The console's friend list service (game server 00003200) logs in the same way. This server has no friends server,
+	// * so it says so at once; a token for a server that cannot answer would leave the console's friends service, and
+	// * whatever waits for it, stuck.
+	if strings.EqualFold(gameServerID, friendsGameServerID) {
+		s.cfg.Logf("account: refusing the friend list service's NEX token for %q (this server has no friends server)", nnid)
+		writeError(w, 400, "0118", "Unique ID and Game Server ID are not linked")
+
 		return
 	}
 
