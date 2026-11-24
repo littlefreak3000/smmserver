@@ -82,6 +82,11 @@ func selectedList(q selection.Query, scoreApp uint32, firstOrder int) (types.Lis
 	return list, true
 }
 
+// NarrowNormal makes the 100 Mario Challenge's Normal request, which the game sends as the failure rates 0-74 and so reaches
+// down into Easy (0-34), ask for 35-74 only. Without it a Normal run is a mix of Easy and Normal levels (a 96 % win rate level
+// is a legitimate answer to 0-74). On by default; the home server sets it from SMM_NARROW_NORMAL (0 turns it off).
+var NarrowNormal = true
+
 // recommendedRange reads the difficulty filter of RecommendedCourseSearchObject as a clear-rate range in percent.
 // The client sends ["1", min, max, "0", "0"] with min and max as a FAILURE rate (Easy 0-34 ... Super Expert 96-100),
 // or empty strings for "All".
@@ -91,6 +96,10 @@ func recommendedRange(extra types.List[types.String]) (int64, int64) {
 		maxFail, errMax := strconv.ParseInt(string(extra[2]), 10, 64)
 
 		if errMin == nil && errMax == nil {
+			if NarrowNormal && minFail == 0 && maxFail == 74 {
+				minFail = 35 // Normal starts where Easy (0-34) ends
+			}
+
 			return selection.FailureToClear(minFail, maxFail)
 		}
 	}

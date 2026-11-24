@@ -71,6 +71,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_FETCH` | `0` runs the server fully offline, with only the levels already downloaded | on |
 | `SMM_POOL_TARGET` | Levels kept ready in each of four clear-rate bands | 25 |
 | `SMM_DIFFICULTY_CEILING` | The highest clear rate, in percent, a level may have to be kept and offered in difficulty lists (1 to 100). Set it below 100, for example `80`, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists (100 Mario Challenge, the difficulty filter) skip any it already holds. Newest and most-starred lists are not filtered | `100` (off) |
+| `SMM_NARROW_NORMAL` | The 100 Mario Challenge asks for Normal as the failure rates 0-74, which includes Easy (0-34). By default the server serves 35-74 (clear rate 26-65 %) so Normal does not overlap Easy. `0` serves the range as the game asks for it | `1` (on) |
 | `SMM_POOL_BANDS` | Where the pool's bands end, in percent clear rate: rising whole numbers from 1 to 99, at most 8. `5,20,50` means the bands 0-5, 5-20, 20-50 and 50-100 %. The pool keeps the same number of levels in every band. Cache builds always use the default edges, so a seed keeps its meaning | `5,20,50` |
 | `SMM_POOL_GROW_EVERY`, `SMM_POOL_GROW_BY`, `SMM_POOL_MAX` | Slow growth of the pool (see below) | 10m, 1, 250 |
 | `SMM_HISTORY_LEVELS` | How many of each player's most recently played levels the server remembers so lists skip them (`off` = none) | 1000 |

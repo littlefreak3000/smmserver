@@ -78,6 +78,20 @@ So a list for a range is mostly its own levels, with a few levels from next door
 
 An index built with a prior is drawn this way and an index built without is not, so **the prior is part of the index's fingerprint**, and with it of every challenge code: two players whose codes match drew from the same kind of index. An index without a prior keeps the fingerprint it always had.
 
+## What the game asks for, and Normal
+
+The game sends a failure-rate range, which the server turns into a clear-rate range (`100 - max` to `100 - min`):
+
+| Request | Failure rate | Clear rate |
+|---|---|---|
+| 100 Mario Challenge, Easy | 0-34 | 66-100 % |
+| 100 Mario Challenge, Normal | 0-74 | 26-100 % |
+| Course World, Normal filter | 35-74 | 26-65 % |
+| Expert | 75-95 | 5-25 % |
+| Super Expert | 96-100 | 0-4 % |
+
+(Seen in the server log, `Recommended: asked 50 (extra=[...])`.) The Normal request of the 100 Mario Challenge starts at 0 and so reaches down into Easy: a level with a 96 % win rate is a legitimate answer. By default the server **narrows it to 35-74** (`SMM_NARROW_NORMAL`, `0` turns that off) so a Normal run does not contain Easy levels, and Easy, Expert and Super Expert keep their own ranges.
+
 ## Filtering out the easiest levels
 
 `SMM_DIFFICULTY_CEILING` (percent, 1 to 100, default 100) sets the highest difficulty score a level may have. Below 100 it does two things:

@@ -301,6 +301,7 @@ func startSelection() {
 	}
 
 	nex_datastore_super_mario_maker.Selector = sel
+	nex_datastore_super_mario_maker.NarrowNormal = getenv("SMM_NARROW_NORMAL", "1") != "0"
 	nex_datastore_super_mario_maker.NNIDForPID = func(pid uint32) string {
 		var nnid string
 		if err := database.DB.QueryRow(`SELECT nnid FROM accounts WHERE pid = $1`, pid).Scan(&nnid); err != nil {

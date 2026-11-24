@@ -631,6 +631,9 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 # Highest clear rate (percent) a level may have to be kept and offered in difficulty lists. 100 = no ceiling. Set it lower, for
 # example 80, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists skip any it holds.
 #SMM_DIFFICULTY_CEILING=100
+# The 100 Mario Challenge asks for "Normal" as the failure rates 0-74, which includes Easy (0-34). By default the server narrows
+# that to 35-74 so Normal does not overlap Easy. 0 gives the game's range as it asks for it (a mix of Easy and Normal levels).
+#SMM_NARROW_NORMAL=1
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
 # Wii U with Inkay: by default only the game is answered and the console's own programs (Wii U Menu, friends, Miiverse) are left
