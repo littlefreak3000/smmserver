@@ -310,6 +310,7 @@ func (s *Service) PIDFor(nnid string) (uint32, error) {
 		_, err := s.cfg.DB.Exec(`INSERT INTO datastore.accounts (nnid, pid, created) VALUES ($1, $2, $3)`, nnid, pid, s.cfg.Now().UTC())
 		if err == nil {
 			s.cfg.Logf("account: registered %q as PID %d", nnid, pid)
+			s.cfg.Logf("account: that player ID is made up from the name. A Wii U whose account has another one rejects it (error 102-2932): turn on SMM_PROXY_PRETENDO=1 so the real one is learned from Pretendo, or run \"smm-server account adopt\" (docs/setup-wiiu.md)")
 			return pid, nil
 		}
 
@@ -325,6 +326,41 @@ func (s *Service) PIDFor(nnid string) (uint32, error) {
 	}
 
 	return 0, fmt.Errorf("could not allocate a PID for %q", nnid)
+}
+
+// LearnPID records the player ID that an account really has (as the real Pretendo reports it in the profile reply), so the
+// server hands out that ID instead of one made up from the name: a console refuses a login whose profile carries another
+// ID than its own account file holds. It reports whether the stored ID changed and what it was before.
+func (s *Service) LearnPID(nnid string, pid uint32) (changed bool, previous uint32, err error) {
+	if !validNNID(nnid) || pid == 0 {
+		return false, 0, fmt.Errorf("not a usable account: %q with player ID %d", nnid, pid)
+	}
+
+	qerr := s.cfg.DB.QueryRow(`SELECT pid FROM datastore.accounts WHERE nnid = $1`, nnid).Scan(&previous)
+	switch {
+	case qerr == nil && previous == pid:
+		return false, previous, nil
+	case qerr != nil && qerr != sql.ErrNoRows:
+		return false, 0, qerr
+	}
+
+	var other string
+	if s.cfg.DB.QueryRow(`SELECT nnid FROM datastore.accounts WHERE pid = $1 AND nnid != $2`, pid, nnid).Scan(&other) == nil {
+		return false, previous, fmt.Errorf("player ID %d already belongs to the account %q on this server", pid, other)
+	}
+
+	if _, err := s.cfg.DB.Exec(`INSERT INTO datastore.accounts (nnid, pid, created) VALUES ($1, $2, $3)
+		ON CONFLICT (nnid) DO UPDATE SET pid = excluded.pid`, nnid, pid, s.cfg.Now().UTC()); err != nil {
+		return false, previous, err
+	}
+
+	if previous == 0 {
+		s.cfg.Logf("account: learned the real player ID of %q from Pretendo: %d", nnid, pid)
+	} else {
+		s.cfg.Logf("account: learned the real player ID of %q from Pretendo: %d (it was %d, made up from the name)", nnid, pid, previous)
+	}
+
+	return true, previous, nil
 }
 
 // NNIDFor is the reverse lookup.

@@ -53,6 +53,9 @@ type Config struct {
 	// account requests are forwarded, and other hosts under pretendo.cc are tunnelled through, so the rest of the console still
 	// behaves as if Pretendo were connected and only games are answered by the home server. See upstream.go.
 	Pretendo bool
+	// LearnProfile is told, in pass-through mode, the account name and the real player ID that the real Pretendo reports in the
+	// profile reply of a system title, so the home server can hand out that ID to the game. nil = not interested.
+	LearnProfile func(userID string, pid uint32)
 	// UpstreamDial and UpstreamTLS replace how the real hosts are reached (for tests); nil means the normal network.
 	UpstreamDial func(ctx context.Context, network, addr string) (net.Conn, error)
 	UpstreamTLS  *tls.Config

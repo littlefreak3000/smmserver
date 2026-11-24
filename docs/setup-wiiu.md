@@ -42,18 +42,23 @@ In games-only mode the Wii U Menu may look signed out of the network (a password
 
 Inkay only supports the release version of Aroma set up to start automatically. If you use it differently, SpotPass and other things may misbehave.
 
-## 2. The account
+## 2. The account and its player ID
 
-The console keeps a **player ID** for its network account. In the one console test the server's own choice (a number derived from the account name, shown in the log as `login as "name" (PID ...)`) was accepted by the game without any setup. `smm-server account adopt` is only needed to make an account use the player ID of an imported creator, or if the log shows `Account X expected, got Y`:
+The console keeps a **player ID** (PID) for its network account, and it **rejects a login whose profile carries a different one**. The symptom is error 102-2932 on the console, and in the server's log a `login` and a `profile` request from the game with no `nex_token` request after them. The server cannot make the ID up: for a name it has not seen it derives a number from the name, which is almost never the account's real ID. There are two ways to give it the real one:
 
-1. Run **Dumpling** on the Wii U and dump the online files (as in the Cemu guide). In the dump, open `<user>/mlc01/usr/save/system/act/<number>/account.dat` for the user you will play as.
-2. On the PC, in a terminal next to the server program:
+- **Pass-through mode (`SMM_PROXY_PRETENDO=1`, see section 3): nothing to do.** The console's own programs log in to the real Pretendo through this server, and the server reads the real player ID out of Pretendo's profile reply and keeps it. The log says `account: learned the real player ID of "<name>" from Pretendo: <number>`. This happens at boot, before the game asks. It needs a Pretendo account on the console.
+- **`smm-server account adopt` with the console's account file**, for games-only mode or a console without a Pretendo account:
 
-   ```
-   smm-server account adopt "path/to/account.dat"
-   ```
+  1. Run **Dumpling** on the Wii U and dump the online files (as in the Cemu guide). In the dump, open `<user>/mlc01/usr/save/system/act/<number>/account.dat` for the user you will play as. The line `PrincipalId=` holds the ID in hex.
+  2. On the PC, in a terminal next to the server program (stop the server first):
 
-   It prints the account name and player ID it will use. If it says the file has no network account, that user has no Nintendo Network or Pretendo account.
+     ```
+     smm-server account adopt "path/to/account.dat"
+     ```
+
+     It prints the account name and player ID it will use. If it says the file has no network account, that user has no Nintendo Network or Pretendo account.
+
+If the log shows `account: that player ID is made up from the name`, that account has no real ID yet. If the console has already logged in once and the server picked its own ID for that name, either way replaces it.
 
 This server cannot create or link accounts (a console's account screens need many more services than it has), so the account has to exist already.
 
@@ -88,6 +93,7 @@ Run the server with `SMM_TRACE=1` (in `data/settings.env`, or as an environment 
 
 | Code | What it means | What to do |
 |---|---|---|
+| **102-2932** | The console got an error it does not know: here almost always **a wrong player ID**. The log shows `login` and `profile` from the game and then no `nex_token` request. | Use pass-through mode (the real ID is learned automatically) or run `smm-server account adopt` on the console's `account.dat`; see section 2. |
 | **102-2160** | The console rejected a TLS certificate (`HTTP_SSL_CACERT`). This server's certificate is self-signed and only accepted while Inkay's patch is active. | Check that Inkay is on and **"Connect to Pretendo network" is on** ("Using Pretendo Network" at boot). With it off the console contacts the real `nintendo.net` addresses through the proxy and rejects the certificate. Check the proxy address is this PC. |
 | **102-2152** | The server returned nothing (`HTTP_GOT_NOTHING`): the login request never completed. | On **v0.1.0 and v0.1.1 this always happens**: their proxy cut every request at 600 bytes, and a Wii U login is about 1,350. Use v0.1.2 or later. Otherwise look for `ended without a request the proxy understood` in the log. |
 | **102-2402** | The server answered a token problem as "bad format". | Fixed long ago; update the server. |

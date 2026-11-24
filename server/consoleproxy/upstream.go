@@ -10,7 +10,10 @@ package consoleproxy
 // Only hosts under pretendo.cc are ever contacted, so this is still not an open proxy.
 
 import (
+	"bytes"
 	"context"
+	"encoding/xml"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -60,6 +63,8 @@ func (p *Proxy) upstream(scheme, host string) *httputil.ReverseProxy {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			pr.Out.Host = target.Host
+			// * the proxy reads some replies, so it asks for them uncompressed (the Go transport then decodes by itself)
+			pr.Out.Header.Del("Accept-Encoding")
 		},
 		Transport: &http.Transport{
 			DialContext:         p.dial,
@@ -82,7 +87,48 @@ func (p *Proxy) forwardAccount(w http.ResponseWriter, r *http.Request, hostport 
 	}
 
 	p.cfg.Logf("proxy: sent %s %s%s on to the real Pretendo (system title %s)", r.Method, host, r.URL.Path, r.Header.Get("X-Nintendo-Title-ID"))
-	p.upstream("https", host).ServeHTTP(w, r)
+
+	rp := p.upstream("https", host)
+	if p.cfg.LearnProfile != nil && r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/api/people/@me/profile") {
+		rp.ModifyResponse = p.learnFromProfile
+	}
+
+	rp.ServeHTTP(w, r)
+}
+
+// learnFromProfile reads the account name and player ID out of the real Pretendo's profile reply and tells LearnProfile. The
+// reply goes on to the console unchanged.
+func (p *Proxy) learnFromProfile(resp *http.Response) error {
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.Header.Set("Content-Length", fmt.Sprint(len(body)))
+
+	if err != nil {
+		return nil // the console gets what was read; nothing is learned
+	}
+
+	var person struct {
+		PID    uint64 `xml:"pid"`
+		UserID string `xml:"user_id"`
+	}
+
+	if xml.Unmarshal(body, &person) != nil || person.PID == 0 || person.PID > 0xffffffff || person.UserID == "" {
+		p.cfg.Logf("proxy: the profile reply from Pretendo has no usable player ID (%d bytes)", len(body))
+
+		return nil
+	}
+
+	p.cfg.Logf("proxy: Pretendo says %q has player ID %d", person.UserID, person.PID)
+	p.cfg.LearnProfile(person.UserID, uint32(person.PID))
+
+	return nil
 }
 
 // forwardPlain sends a plain absolute-URL request for a Pretendo host on to the real server.

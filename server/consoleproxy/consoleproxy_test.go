@@ -351,9 +351,10 @@ func TestSpotPassConnectIsDroppedByDefault(t *testing.T) {
 // * Pretendo pass-through (opt-in): system titles reach the real Pretendo, games are answered here
 
 type fakePretendo struct {
-	proxy *httptest.Server
-	hosts []string // addresses the proxy was asked to reach
-	mu    sync.Mutex
+	proxy   *httptest.Server
+	hosts   []string // addresses the proxy was asked to reach
+	learned []string // "name=pid" for every profile reply the proxy read
+	mu      sync.Mutex
 }
 
 func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) {
@@ -363,6 +364,17 @@ func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) 
 
 	// * the "real" account server (TLS) and a TCP echo for tunnelled connections
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// * a test can ask for a profile reply like the real Pretendo's, or for an error
+		if r.Header.Get("X-Test-Profile") != "" {
+			if code := r.Header.Get("X-Test-Status"); code == "404" {
+				w.WriteHeader(http.StatusNotFound)
+			}
+
+			fmt.Fprint(w, `<?xml version="1.0"?><person><active_flag>Y</active_flag><pid>1799000123</pid><region>2</region><user_id>SomeUser</user_id></person>`)
+
+			return
+		}
+
 		fmt.Fprintf(w, "upstream:%s:%s", r.Host, r.URL.Path)
 	}))
 	t.Cleanup(upstream.Close)
@@ -393,6 +405,11 @@ func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) 
 		Account:     account,
 		Pretendo:    pretendo,
 		UpstreamTLS: &tls.Config{InsecureSkipVerify: true},
+		LearnProfile: func(userID string, pid uint32) {
+			f.mu.Lock()
+			f.learned = append(f.learned, fmt.Sprintf("%s=%d", userID, pid))
+			f.mu.Unlock()
+		},
 		UpstreamDial: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			f.mu.Lock()
 			f.hosts = append(f.hosts, addr)
@@ -525,5 +542,56 @@ func TestPretendoModeTunnelsOtherPretendoHostsAndOnlyThose(t *testing.T) {
 		if strings.Contains(h, "example.com") {
 			t.Fatalf("the proxy contacted %s", h)
 		}
+	}
+}
+
+func TestPretendoModeLearnsTheRealPlayerIDFromTheProfileReply(t *testing.T) {
+	f, c := newFakePretendo(t, true)
+
+	profile := func(title, status string) string {
+		req, _ := http.NewRequest("GET", "https://account.pretendo.cc/v1/api/people/@me/profile", nil)
+		req.Header.Set("X-Nintendo-Title-ID", title)
+		req.Header.Set("X-Test-Profile", "1")
+		req.Header.Set("Accept-Encoding", "gzip") // the proxy must still be able to read the reply
+
+		if status != "" {
+			req.Header.Set("X-Test-Status", status)
+		}
+
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer resp.Body.Close()
+
+		b, _ := io.ReadAll(resp.Body)
+
+		return string(b)
+	}
+
+	// * a system title's profile reply is read, and still reaches the console whole
+	body := profile("0005001010040100", "")
+	if !strings.Contains(body, "<pid>1799000123</pid>") || !strings.Contains(body, "<user_id>SomeUser</user_id>") {
+		t.Fatalf("the console did not get the reply: %q", body)
+	}
+
+	f.mu.Lock()
+	got := append([]string(nil), f.learned...)
+	f.mu.Unlock()
+
+	if len(got) != 1 || got[0] != "SomeUser=1799000123" {
+		t.Fatalf("learned %v, want [SomeUser=1799000123]", got)
+	}
+
+	// * an error reply teaches nothing, and the game's own request (answered here) neither
+	profile("0005001010040100", "404")
+	profile("000500001018DC00", "")
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.learned) != 1 {
+		t.Fatalf("learned %v after an error reply and a game request, want only the first", f.learned)
 	}
 }

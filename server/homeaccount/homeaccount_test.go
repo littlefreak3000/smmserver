@@ -494,3 +494,55 @@ func TestLoginExtras(t *testing.T) {
 		t.Fatalf("profile without a token: %d %s", code, body)
 	}
 }
+
+func TestLearnPIDStoresTheRealIDAndReplacesAMadeUpOne(t *testing.T) {
+	e := setup(t)
+
+	// * a name the server has not seen: the real ID is stored as it is
+	changed, prev, err := e.svc.LearnPID("RealUser", 1799000123)
+	if err != nil || !changed || prev != 0 {
+		t.Fatalf("new account: changed=%v previous=%d err=%v", changed, prev, err)
+	}
+
+	if pid, err := e.svc.PIDFor("realuser"); err != nil || pid != 1799000123 { // the name is not case sensitive
+		t.Fatalf("PIDFor = %d %v, want 1799000123", pid, err)
+	}
+
+	// * a name that already got a made-up ID: the real one replaces it
+	made, err := e.svc.PIDFor("Seen")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changed, prev, err = e.svc.LearnPID("Seen", 1799000456)
+	if err != nil || !changed || prev != made {
+		t.Fatalf("existing account: changed=%v previous=%d (want %d) err=%v", changed, prev, made, err)
+	}
+
+	if pid, _ := e.svc.PIDFor("Seen"); pid != 1799000456 {
+		t.Fatalf("PIDFor after learning = %d", pid)
+	}
+
+	// * the same ID again changes nothing
+	if changed, _, err := e.svc.LearnPID("Seen", 1799000456); err != nil || changed {
+		t.Fatalf("repeat: changed=%v err=%v", changed, err)
+	}
+
+	// * an ID that belongs to another account is refused and nothing moves
+	if _, _, err := e.svc.LearnPID("Other", 1799000456); err == nil {
+		t.Fatal("a player ID held by another account was accepted")
+	}
+
+	if pid, _ := e.svc.PIDFor("Seen"); pid != 1799000456 {
+		t.Fatalf("a refused request changed an account: %d", pid)
+	}
+
+	for _, bad := range []struct {
+		name string
+		pid  uint32
+	}{{"", 5}, {"has space", 5}, {"Zero", 0}} {
+		if _, _, err := e.svc.LearnPID(bad.name, bad.pid); err == nil {
+			t.Fatalf("%q with player ID %d was accepted", bad.name, bad.pid)
+		}
+	}
+}

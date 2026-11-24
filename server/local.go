@@ -286,7 +286,11 @@ func startHomeAccount() {
 
 	go http.Serve(ln, handler) //nolint:errcheck
 
-	startConsoleProxy(handler)
+	startConsoleProxy(handler, func(name string, pid uint32) {
+		if _, _, err := svc.LearnPID(name, pid); err != nil {
+			globals.Logger.Warningf("Cannot use the player ID %d that Pretendo reports for %q: %s", pid, name, err.Error())
+		}
+	})
 
 	url := "http://" + publicHost + ":" + port
 	seedPageURL = url + "/seed"
@@ -315,7 +319,7 @@ func startHomeAccount() {
 
 // startConsoleProxy starts the proxy a Wii U patched with Inkay uses to reach this server (see docs/setup-wiiu.md).
 // SMM_PROXY_PORT=0 turns it off. It only answers the account service, the connection test and the course downloads.
-func startConsoleProxy(account http.Handler) {
+func startConsoleProxy(account http.Handler, learn func(userID string, pid uint32)) {
 	port := getenv("SMM_PROXY_PORT", "8888")
 	if port == "0" {
 		return
@@ -335,6 +339,8 @@ func startConsoleProxy(account http.Handler) {
 		// * SMM_PROXY_PRETENDO=1: the console's own programs keep using the real Pretendo Network through the proxy (needs a
 		// * Pretendo account on the console); only games are answered here
 		Pretendo: getenv("SMM_PROXY_PRETENDO", "") == "1",
+		// * in pass-through mode the real player ID of each account is read from Pretendo's profile reply
+		LearnProfile: learn,
 	})
 	if err != nil {
 		globals.Logger.Warningf("Cannot set up the Wii U proxy: %s", err.Error())

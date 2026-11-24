@@ -77,7 +77,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
 | `SMM_DIFFICULTY_PRIOR` | How levels are sorted by difficulty: `off` (raw clear rate) or `MEAN,STRENGTH` | `0.2,3` |
 | `SMM_TRACE` | `1` logs every request the game makes; only for tracking down problems | off |
-| `SMM_PROXY_PRETENDO` | `1` lets a Wii U's own programs (Wii U Menu, friends, Miiverse) keep using the real Pretendo Network through the proxy; needs a Pretendo account on the console. By default only the game is answered and the rest is dropped (see [docs/setup-wiiu.md](docs/setup-wiiu.md)) | off |
+| `SMM_PROXY_PRETENDO` | `1` lets a Wii U's own programs (Wii U Menu, friends, Miiverse) keep using the real Pretendo Network through the proxy; needs a Pretendo account on the console, and the server then learns each account's real player ID from Pretendo, so no account file is needed. By default only the game is answered and the rest is dropped (see [docs/setup-wiiu.md](docs/setup-wiiu.md)) | off |
 | `SMM_DATA_DIR` | A different data folder | `./data` |
 
 Ports: account service 8080 (`SMM_ACCOUNT_PORT`, 0 = off), Wii U proxy 8888 (`SMM_PROXY_PORT`, 0 = off), course downloads 9000 (`SMM_S3_PORT`), NEX authentication 60000 and secure 60001 (UDP). Allow them in the firewall if the console or Cemu cannot connect. `SMM_PUBLIC_HOST` is also the address the console uses to download courses. Setting `PN_SMM_CONFIG_S3_ENDPOINT` switches back to an external S3, and any `PN_*` variable you set yourself wins over the generated defaults.
