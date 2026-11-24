@@ -16,6 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -44,6 +46,45 @@ var DefaultBands = []Band{
 	{"5-20%", 0.05, 0.20},
 	{"20-50%", 0.20, 0.50},
 	{"50-100%", 0.50, 1.0000001},
+}
+
+// ParseBands reads band edges in percent, for example "5,20,50", into the bands 0-5%, 5-20%, 20-50% and 50-100%. Each number
+// is the top of a band and the bottom of the next one, so the numbers must rise and lie between 1 and 99, and there can be at
+// most 8 of them (9 bands). The pool keeps the same number of levels in every band.
+func ParseBands(s string) ([]Band, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, errors.New("no band edges given")
+	}
+
+	var edges []int
+
+	for _, part := range strings.Split(s, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || n < 1 || n > 99 {
+			return nil, fmt.Errorf("%q is not a whole number from 1 to 99", strings.TrimSpace(part))
+		}
+
+		if len(edges) > 0 && n <= edges[len(edges)-1] {
+			return nil, fmt.Errorf("the edges must rise, but %d follows %d", n, edges[len(edges)-1])
+		}
+
+		edges = append(edges, n)
+	}
+
+	if len(edges) > 8 {
+		return nil, errors.New("at most 8 edges (9 bands) are allowed")
+	}
+
+	bands := make([]Band, 0, len(edges)+1)
+	lo := 0
+
+	for _, e := range edges {
+		bands = append(bands, Band{fmt.Sprintf("%d-%d%%", lo, e), float64(lo) / 100, float64(e) / 100})
+		lo = e
+	}
+
+	// * the top band reaches 100%: Max is a little above 1 so a score of exactly 1 belongs to it
+	return append(bands, Band{fmt.Sprintf("%d-100%%", lo), float64(lo) / 100, 1.0000001}), nil
 }
 
 // ErrMaxDraws means Fill used up its draw budget before every band was full.

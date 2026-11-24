@@ -579,3 +579,59 @@ func TestOneBandThatCannotBeFilledDoesNotInflateTheOthers(t *testing.T) {
 		t.Fatalf("counts %v; an unfillable band must hold the others at the same target", counts)
 	}
 }
+
+func TestParseBands(t *testing.T) {
+	got, err := pool.ParseBands(" 5, 20 ,50")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []pool.Band{{"0-5%", 0, 0.05}, {"5-20%", 0.05, 0.20}, {"20-50%", 0.20, 0.50}, {"50-100%", 0.50, 1.0000001}}
+	if len(got) != len(want) {
+		t.Fatalf("got %d bands, want %d: %v", len(got), len(want), got)
+	}
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("band %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	if one, err := pool.ParseBands("40"); err != nil || len(one) != 2 || one[0].Max != 0.4 || one[1].Min != 0.4 {
+		t.Fatalf("a single edge gives two bands: %v %v", one, err)
+	}
+
+	for _, bad := range []string{"", "  ", "x", "5,5", "20,5", "0,10", "10,100", "5,,20", "-3", "1,2,3,4,5,6,7,8,9"} {
+		if b, err := pool.ParseBands(bad); err == nil {
+			t.Fatalf("%q was accepted: %v", bad, b)
+		}
+	}
+}
+
+func TestACustomBandListIsStockedAndCounted(t *testing.T) {
+	f := newFake(t)
+	p, _ := setup(t, f)
+
+	bands, err := pool.ParseBands("50")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p.Bands = bands
+	p.TargetPerBand = 3
+
+	if _, err := p.Fill(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	counts, err := p.Counts()
+	if err != nil || len(counts) != 2 {
+		t.Fatalf("counts %v err %v, want two bands", counts, err)
+	}
+
+	for i, c := range counts {
+		if c < 3 {
+			t.Fatalf("band %d holds %d levels, want at least 3 (%v)", i, c, counts)
+		}
+	}
+}

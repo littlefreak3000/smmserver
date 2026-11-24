@@ -468,6 +468,17 @@ func startFetching() {
 		Logf:   func(f string, a ...any) { globals.Logger.Infof(f, a...) },
 	}
 
+	// * SMM_POOL_BANDS: where the pool's bands end, in percent (default 5,20,50 = 0-5%, 5-20%, 20-50%, 50-100%)
+	if raw := getenv("SMM_POOL_BANDS", ""); raw != "" {
+		bands, err := pool.ParseBands(raw)
+		if err != nil {
+			globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
+		} else {
+			p.Bands = bands
+			globals.Logger.Infof("Level pool bands (SMM_POOL_BANDS=%s): %d bands, %d levels each", raw, len(bands), target)
+		}
+	}
+
 	database.OnMissing = p.OnMissing
 	database.OnMissingProfile = func(pid uint32) bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -557,6 +568,10 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
 #SMM_POOL_MAX=250
+# Where the pool's difficulty bands end, in percent clear rate. The pool keeps the same number of levels in every band, so
+# this decides how much stock each difficulty gets. 5,20,50 means the bands 0-5%, 5-20%, 20-50% and 50-100% (the default);
+# for example 10,30,60,85 makes five bands. Rising whole numbers from 1 to 99, at most 8. Does not change cache builds.
+#SMM_POOL_BANDS=5,20,50
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
 # Wii U with Inkay: by default only the game is answered and the console's own programs (Wii U Menu, friends, Miiverse) are left
