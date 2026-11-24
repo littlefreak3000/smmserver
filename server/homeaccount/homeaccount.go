@@ -115,6 +115,7 @@ func New(cfg Config) *Service {
 	s.mux.HandleFunc("GET /v1/api/admin/mapped_ids", s.mappedIDs)
 	s.mux.HandleFunc("GET /v1/api/admin/time", s.serverTime)
 	s.mux.HandleFunc("GET /v1/api/people/@me/profile", s.profile)
+	s.mux.HandleFunc("GET /v1/api/support/resend_confirmation/", s.resendConfirmation)
 
 	return s
 }
@@ -129,7 +130,7 @@ func (w *statusWriter) WriteHeader(c int) { w.status = c; w.ResponseWriter.Write
 func (s *Service) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	w := &statusWriter{ResponseWriter: rw, status: 200}
 	defer func() {
-		s.cfg.Logf("account %s %s %s -> %d", r.RemoteAddr, r.Method, r.URL.RequestURI(), w.status)
+		s.cfg.Logf("account %s %s %s -> %d (title %s)", r.RemoteAddr, r.Method, r.URL.RequestURI(), w.status, r.Header.Get("X-Nintendo-Title-ID"))
 	}()
 
 	// * Anything we do not implement gets a clear XML error (and shows up in the log, which is how you
@@ -472,9 +473,20 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 	writeXML(w, 200, fmt.Sprintf(`<person><active_flag>Y</active_flag><birth_date>1990-01-01</birth_date><country>%s</country><create_date>%s</create_date>`+
 		`<device_attributes></device_attributes><gender>M</gender><language>en</language><updated>%s</updated><marketing_flag>N</marketing_flag>`+
 		`<off_device_flag>N</off_device_flag><pid>%d</pid><email><address>%s@home.invalid</address><id>%d</id><parent>N</parent><primary>Y</primary>`+
-		`<reachable>N</reachable><type>DEFAULT</type><updated_by>USER</updated_by><validated>N</validated><validated_date></validated_date></email>`+
+		`<reachable>Y</reachable><type>DEFAULT</type><updated_by>USER</updated_by><validated>Y</validated><validated_date>%s</validated_date></email>`+
 		`<region>%s</region><tz_name>America/New_York</tz_name><user_id>%s</user_id><utc_offset>-18000</utc_offset></person>`,
-		esc(country), stamp, stamp, pid, esc(nnid), pid, esc(region), esc(nnid)))
+		esc(country), stamp, stamp, pid, esc(nnid), pid, stamp, esc(region), esc(nnid)))
+}
+
+// resendConfirmation answers the Wii U Menu's "send the confirmation e-mail again". The profile says the address is already
+// confirmed, so the menu should not ask; if it does, an empty success keeps it from stopping on a 404.
+func (s *Service) resendConfirmation(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.bearer(r); !ok {
+		writeInvalidToken(w)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Service) mappedIDs(w http.ResponseWriter, r *http.Request) {

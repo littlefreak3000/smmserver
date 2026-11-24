@@ -462,6 +462,19 @@ func TestLoginExtras(t *testing.T) {
 		t.Fatalf("profile = %+v (pid %d)", p, pid)
 	}
 
+	// * the address counts as confirmed, so the Wii U Menu never offers to resend a confirmation
+	if !strings.Contains(body, "<validated>Y</validated>") || !strings.Contains(body, "<reachable>Y</reachable>") {
+		t.Fatalf("profile email is not confirmed: %s", body)
+	}
+
+	if code, _ = e.do(t, "GET", "/v1/api/support/resend_confirmation/", auth, nil); code != 200 {
+		t.Fatalf("resend_confirmation answered %d", code)
+	}
+
+	if code, body = e.do(t, "GET", "/v1/api/support/resend_confirmation/", nil, nil); code != 400 || !strings.Contains(body, "<code>0005</code>") {
+		t.Fatalf("resend_confirmation without a token: %d %s", code, body)
+	}
+
 	if code, body = e.do(t, "GET", "/v1/api/people/@me/profile", nil, nil); code != 400 || !strings.Contains(body, "<code>0005</code>") {
 		t.Fatalf("profile without a token: %d %s", code, body)
 	}
