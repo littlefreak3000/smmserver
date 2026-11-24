@@ -488,6 +488,10 @@ func (s *Service) profile(w http.ResponseWriter, r *http.Request) {
 
 	stamp := created.UTC().Format("2006-01-02T15:04:05")
 
+	// * what the reply is built from, so a console that stops right after the profile can be compared with one that does not
+	s.cfg.Logf("account: profile for %q (PID %d): country %q region %q, request language %q, title %s", nnid, pid, country, region,
+		r.Header.Get("Accept-Language"), r.Header.Get("X-Nintendo-Title-ID"))
+
 	writeXML(w, 200, fmt.Sprintf(`<person><active_flag>Y</active_flag><birth_date>1990-01-01</birth_date><country>%s</country><create_date>%s</create_date>`+
 		`<device_attributes></device_attributes><gender>M</gender><language>en</language><updated>%s</updated><marketing_flag>N</marketing_flag>`+
 		`<off_device_flag>N</off_device_flag><pid>%d</pid><email><address>%s@home.invalid</address><id>%d</id><parent>N</parent><primary>Y</primary>`+
