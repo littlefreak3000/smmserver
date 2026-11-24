@@ -52,7 +52,7 @@ Do this before the first login. If the console has already logged in once and th
 
 ## 3. Point the console at the server
 
-1. Start the server. Note this PC's address in the box it prints (the same one used for Cemu; set `SMM_PUBLIC_HOST` in `data/settings.env` if it picked the wrong one) and allow **TCP 8888 and 9000** and **UDP 60000 and 60001** in the PC's firewall. (`SMM_PROXY_PORT` changes the proxy port; `0` turns it off.)
+1. Start the server. The box it prints shows this PC's address and the exact proxy settings to type on the console (the address is the same one used for Cemu; if the PC has several network addresses the box lists the others; set `SMM_PUBLIC_HOST` in `data/settings.env` if it picked the wrong one) and allow **TCP 8888 and 9000** and **UDP 60000 and 60001** in the PC's firewall. (`SMM_PROXY_PORT` changes the proxy port; `0` turns it off.)
 2. On the Wii U open **System Settings > Internet > Connect to the Internet > Connection List**, choose the connection the console uses (the one with the Wii U logo), then **Change Settings**.
 3. Go to the page with **Proxy Settings**, choose **Set**, press OK, and enter:
    - proxy server: this PC's address

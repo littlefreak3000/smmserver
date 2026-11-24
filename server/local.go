@@ -57,6 +57,9 @@ var catalogPath string
 // publicHost is the address consoles use to reach this machine.
 var publicHost string
 
+// proxyPort is the port the Wii U proxy listens on ("" when it is off or could not start).
+var proxyPort string
+
 var dataDirPath string
 
 // coursesDirPath is where course files live; builtinS3 is true when the built-in S3 serves it.
@@ -159,6 +162,37 @@ func lanIPv4() string {
 	}
 
 	return "127.0.0.1"
+}
+
+// otherLANIPv4 lists the private IPv4 addresses of this PC other than `except`: with several adapters (Wi-Fi and cable, a
+// VPN, a virtual machine) the one picked may not be the one the console can reach, so the start-up box shows the rest.
+func otherLANIPv4(except string) []string {
+	var out []string
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	for _, ifc := range ifaces {
+		// * a loopback adapter (even one with a private address on it) or one that is down cannot be reached from the console
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := ifc.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && n.IP.IsPrivate() && n.IP.String() != except {
+				out = append(out, n.IP.String())
+			}
+		}
+	}
+
+	return out
 }
 
 func setDefaultEnv(k, v string) {
@@ -304,6 +338,8 @@ func startConsoleProxy(account http.Handler) {
 	}
 
 	go http.Serve(ln, p) //nolint:errcheck
+
+	proxyPort = port
 
 	globals.Logger.Infof("Wii U proxy listening on %s (only for a Wii U patched with Inkay; SMM_PROXY_PORT=0 turns it off)", ln.Addr().String())
 }
@@ -640,22 +676,44 @@ func printBanner() {
 		abs = dataDirPath
 	}
 
-	fmt.Printf(`
-==================================================================================
- Super Mario Maker home server is running
+	var b strings.Builder
 
-   This PC (for your console / Cemu): %s
-   Levels in the archive so far:      %d  (more are fetched in the background)
-   Data folder:                       %s
+	b.WriteString("\n==================================================================================\n")
+	b.WriteString(" Super Mario Maker home server is running\n\n")
+	fmt.Fprintf(&b, "   THIS PC'S ADDRESS (type this on your console / Cemu):  %s\n", publicHost)
 
-   Cemu:  copy %s next to Cemu's settings.xml
-          then Options > General settings > Account > Network Service: Custom
-   If the console cannot connect, allow in the firewall: TCP %s, %s  and  UDP %s, %s
-   Settings: %s     Stop: Ctrl+C
-==================================================================================
+	if others := otherLANIPv4(publicHost); len(others) > 0 {
+		fmt.Fprintf(&b, "   This PC also has: %s\n", strings.Join(others, ", "))
+		b.WriteString("   If the console cannot reach the address above, use one of these instead: put\n")
+		fmt.Fprintf(&b, "   SMM_PUBLIC_HOST=<address> in %s and restart.\n", filepath.Join(abs, "settings.env"))
+	}
 
-`, publicHost, levels, abs, filepath.Join(abs, "network_services.xml"),
-		getenv("SMM_ACCOUNT_PORT", "8080"), getenv("SMM_S3_PORT", "9000"),
-		os.Getenv("PN_SMM_AUTHENTICATION_SERVER_PORT"), os.Getenv("PN_SMM_SECURE_SERVER_PORT"),
-		filepath.Join(abs, "settings.env"))
+	if publicHost == "127.0.0.1" {
+		b.WriteString("   !! No network address was found. Connect this PC to your home network, then restart.\n")
+	}
+
+	fmt.Fprintf(&b, "\n   Levels in the archive so far:  %d  (more are fetched in the background)\n", levels)
+	fmt.Fprintf(&b, "   Data folder:                   %s\n\n", abs)
+
+	fmt.Fprintf(&b, "   Cemu:  copy %s next to Cemu's settings.xml\n", filepath.Join(abs, "network_services.xml"))
+	b.WriteString("          then Options > General settings > Account > Network Service: Custom\n")
+
+	if proxyPort != "" {
+		b.WriteString("\n   Wii U (with Inkay): System Settings > Internet > Connect to the Internet > Connection List >\n")
+		b.WriteString("          your connection > Change Settings > Proxy Settings > Set, then enter:\n")
+		fmt.Fprintf(&b, "              proxy server:  %s\n", publicHost)
+		fmt.Fprintf(&b, "              port:          %s        (choose \"Don't Use Authentication\")\n", proxyPort)
+	}
+
+	fmt.Fprintf(&b, "\n   If the console cannot connect, allow in the firewall: TCP %s, %s", getenv("SMM_ACCOUNT_PORT", "8080"), getenv("SMM_S3_PORT", "9000"))
+
+	if proxyPort != "" {
+		fmt.Fprintf(&b, ", %s", proxyPort)
+	}
+
+	fmt.Fprintf(&b, "  and  UDP %s, %s\n", os.Getenv("PN_SMM_AUTHENTICATION_SERVER_PORT"), os.Getenv("PN_SMM_SECURE_SERVER_PORT"))
+	fmt.Fprintf(&b, "   Settings: %s     Stop: Ctrl+C\n", filepath.Join(abs, "settings.env"))
+	b.WriteString("==================================================================================\n\n")
+
+	fmt.Print(b.String())
 }
