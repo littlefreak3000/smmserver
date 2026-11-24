@@ -463,8 +463,12 @@ func TestLoginExtras(t *testing.T) {
 	}
 
 	// * the console's friend list service gets a quick refusal, not a token for a server that cannot answer it
-	if fcode, fbody := e.do(t, "GET", "/v1/api/provider/nex_token/@me?game_server_id=00003200", auth, nil); fcode != 400 || !strings.Contains(fbody, "<code>0118</code>") {
-		t.Fatalf("friends nex_token: %d %s", fcode, fbody)
+	freq, _ := http.NewRequest("GET", e.srv.URL+"/v1/api/provider/nex_token/@me?game_server_id=00003200", nil)
+	freq.Header.Set("Authorization", "Bearer "+access)
+
+	if fresp, ferr := http.DefaultClient.Do(freq); ferr == nil {
+		fresp.Body.Close()
+		t.Fatalf("friends nex_token got an answer (%d); the connection should be dropped", fresp.StatusCode)
 	}
 
 	// * the address counts as confirmed, so the Wii U Menu never offers to resend a confirmation

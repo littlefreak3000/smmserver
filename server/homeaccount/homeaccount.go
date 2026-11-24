@@ -388,10 +388,11 @@ func (s *Service) nexToken(w http.ResponseWriter, r *http.Request) {
 	// * so it says so at once; a token for a server that cannot answer would leave the console's friends service, and
 	// * whatever waits for it, stuck.
 	if strings.EqualFold(gameServerID, friendsGameServerID) {
-		s.cfg.Logf("account: refusing the friend list service's NEX token for %q (this server has no friends server)", nnid)
-		writeError(w, 400, "0118", "Unique ID and Game Server ID are not linked")
+		// * An error reply was not enough: the console's launch of a game still stalled. With no server at all the request
+		// * fails as a dropped connection and the game starts, so the connection is dropped here without any reply.
+		s.cfg.Logf("account: dropping the friend list service's NEX token request from %q (this server has no friends server)", nnid)
 
-		return
+		panic(http.ErrAbortHandler)
 	}
 
 	pid, err := s.PIDFor(nnid)
