@@ -189,8 +189,30 @@ func (p *Proxy) connect(w http.ResponseWriter, r *http.Request) {
 	_ = srv.Serve(&oneConn{conn: tap})
 
 	if !served.Load() {
-		p.cfg.Logf("proxy: connection for %s ended without a request the proxy understood; %d bytes received, first bytes %q, last read error: %v", host, tap.total, tap.first, tap.err())
+		p.cfg.Logf("proxy: connection for %s ended without a request the proxy understood; %d bytes received, %s, last read error: %v", host, tap.total, describeStart(tap.first, tap.total), tap.err())
 	}
+}
+
+// describeStart says what a connection began with, for the log: the request line and headers (up to the blank line that
+// ends them, with credentials hidden), and only the size of anything after that, since a body can hold a password hash.
+// When no blank line is there, it says so: the request was cut off or never finished.
+func describeStart(first []byte, total int) string {
+	head, _, found := strings.Cut(string(first), "\r\n\r\n")
+
+	lines := strings.Split(head, "\r\n")
+	for i, l := range lines {
+		if name, _, ok := strings.Cut(l, ":"); ok && (strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Cookie")) {
+			lines[i] = name + ": <hidden>"
+		}
+	}
+
+	head = strings.Join(lines, "\r\n")
+
+	if found {
+		return fmt.Sprintf("the request line and headers were complete (%d bytes, then %d bytes of body, not logged): %q", len(head)+4, total-len(head)-4, head)
+	}
+
+	return fmt.Sprintf("NO end of headers (blank line) was seen in the first %d bytes: %q", len(first), head)
 }
 
 // tapConn remembers the first bytes read from a connection.
@@ -219,12 +241,9 @@ func (t *tapConn) Read(b []byte) (int, error) {
 		t.lastErr = err
 	}
 
-	if room := 600 - len(t.first); room > 0 && n > 0 {
-		if n > room {
-			n = room
-		}
-
-		t.first = append(t.first, b[:n]...)
+	// * only the copy is limited; the caller must always be told how many bytes it really got
+	if room := 4096 - len(t.first); room > 0 && n > 0 {
+		t.first = append(t.first, b[:min(n, room)]...)
 	}
 	t.mu.Unlock()
 

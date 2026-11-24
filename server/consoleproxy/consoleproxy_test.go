@@ -254,3 +254,44 @@ func TestAConnectionWithoutAnUnderstoodRequestIsLogged(t *testing.T) {
 
 	t.Fatalf("no trace of the connection:\n%s", strings.Join(lines, "\n"))
 }
+
+// * regression: the console's login request is over 1 KB (a header block of about 1.3 KB) and one with a form body can be
+// * much longer. The log recorder that wraps the connection once cut every read at its own limit, so the request never
+// * arrived whole and the console waited 30 seconds for an answer (error 102-2152).
+func TestLongRequestsArriveWholeThroughTheLoggingWrapper(t *testing.T) {
+	account := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		fmt.Fprintf(w, "header=%d body=%d", len(r.Header.Get("X-Padding")), len(body))
+	})
+
+	p, err := consoleproxy.New(consoleproxy.Config{Account: account})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(p)
+	t.Cleanup(srv.Close)
+
+	proxyURL, _ := url.Parse(srv.URL)
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, MaxVersion: tls.VersionTLS10, CipherSuites: []uint16{tls.TLS_RSA_WITH_AES_128_CBC_SHA}},
+	}}
+
+	for _, n := range []int{1200, 5000, 40000} {
+		req, _ := http.NewRequest("POST", "https://account.pretendo.cc/v1/api/oauth20/access_token/generate", strings.NewReader(strings.Repeat("b", n)))
+		req.Header.Set("X-Padding", strings.Repeat("h", 900))
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("%d byte body: %v", n, err)
+		}
+
+		got, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if want := fmt.Sprintf("header=900 body=%d", n); string(got) != want {
+			t.Fatalf("%d byte body: got %q, want %q", n, got, want)
+		}
+	}
+}
