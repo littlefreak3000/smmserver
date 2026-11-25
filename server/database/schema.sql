@@ -154,7 +154,10 @@ CREATE TABLE IF NOT EXISTS play_history (
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS play_history_recent ON play_history (nnid, played_at DESC);
 
--- Emulates `CREATE SEQUENCE ... START 940000`: AUTOINCREMENT hands out max(seq, max rowid)+1
+-- IDs of levels players upload start at 2^32 (4294967296): the second group of their course ID is not 0000, which no archived
+-- level has (archive IDs are below 2^32), so an uploaded level can never get the ID of an archived one. AUTOINCREMENT hands
+-- out max(seq, max rowid)+1, so importing archive levels (explicit IDs below 2^32) never moves the counter. The server also raises
+-- the counter of an older catalog to this value when it starts (database.FirstLocalID).
 INSERT INTO sqlite_sequence (name, seq)
-	SELECT 'objects', 939999
+	SELECT 'objects', 4294967295
 	WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'objects');

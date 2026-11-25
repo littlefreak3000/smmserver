@@ -78,7 +78,7 @@ func registerCommonSecureProtocols() {
 			globals.Tracef("GetMeta/PrepareGet by data id %d: %s", dataID, e.Message)
 		} else {
 			if meta.DataType > 2 && meta.DataType < 50 { // a level: also show the course ID the game displays for it
-				globals.Tracef("GetMeta/PrepareGet by data id %d (course ID %s): owner %d type %d", dataID, coursecode.Format(uint32(dataID)), meta.OwnerID, meta.DataType)
+				globals.Tracef("GetMeta/PrepareGet by data id %d (course ID %s): owner %d type %d", dataID, coursecode.Format(uint64(dataID)), meta.OwnerID, meta.DataType)
 			} else {
 				globals.Tracef("GetMeta/PrepareGet by data id %d: owner %d type %d", dataID, meta.OwnerID, meta.DataType)
 			}

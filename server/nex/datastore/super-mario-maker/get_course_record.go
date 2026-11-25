@@ -15,7 +15,7 @@ func GetCourseRecord(err error, packet nex.PacketInterface, callID uint32, param
 		return nil, nex.NewError(nex.ResultCodes.DataStore.Unknown, err.Error())
 	}
 
-	globals.Tracef("GetCourseRecord level %d (course ID %s) slot %d", param.DataID, coursecode.Format(uint32(param.DataID)), param.Slot)
+	globals.Tracef("GetCourseRecord level %d (course ID %s) slot %d", param.DataID, coursecode.Format(uint64(param.DataID)), param.Slot)
 
 	if EnsureRecord != nil {
 		EnsureRecord(uint64(param.DataID))

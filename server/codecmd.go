@@ -43,7 +43,7 @@ func runCodeCommand(args []string) int {
 			return 1
 		}
 
-		fmt.Printf("%s  =  data ID %d\n", coursecode.Format(uint32(id)), id)
+		fmt.Printf("%s  =  data ID %d\n", coursecode.Format(uint64(id)), id)
 	}
 
 	return 0

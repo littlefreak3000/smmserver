@@ -60,7 +60,7 @@ func seedObject(t *testing.T, id uint64, owner uint32, name string, dataType int
 	}
 }
 
-func TestSequenceStartsAt940000AndFollowsExplicitIDs(t *testing.T) {
+func TestSequenceStartsAt2To32AndIgnoresArchiveIDs(t *testing.T) {
 	insert := func(explicit any) uint64 {
 		var id uint64
 		var err error
@@ -75,21 +75,24 @@ func TestSequenceStartsAt940000AndFollowsExplicitIDs(t *testing.T) {
 		return id
 	}
 
-	if got := insert(nil); got != 940000 {
-		t.Fatalf("first generated id = %d, want 940000", got)
+	const first = uint64(database.FirstLocalID)
+
+	if got := insert(nil); got != first {
+		t.Fatalf("first generated id = %d, want %d", got, first)
 	}
-	if got := insert(nil); got != 940001 {
-		t.Fatalf("second generated id = %d, want 940001", got)
+	if got := insert(nil); got != first+1 {
+		t.Fatalf("second generated id = %d, want %d", got, first+1)
 	}
-	if got := insert(uint64(5_000_000)); got != 5_000_000 {
+	// * importing archive levels (IDs below 2^32, whatever their size) must not move the counter: an uploaded level can then
+	// * never get the ID of an archived one
+	if got := insert(uint64(65_672_930)); got != 65_672_930 {
 		t.Fatalf("explicit id = %d", got)
 	}
-	if got := insert(nil); got != 5_000_001 {
-		t.Fatalf("id after explicit = %d, want 5000001 (no collisions with imported ids)", got)
+	if got := insert(nil); got != first+2 {
+		t.Fatalf("id after an archive import = %d, want %d", got, first+2)
 	}
-	// * importing an id BELOW the counter must not disturb it
 	insert(uint64(942697))
-	if got := insert(nil); got != 5_000_002 {
+	if got := insert(nil); got != first+3 {
 		t.Fatalf("id after low explicit = %d", got)
 	}
 }
@@ -109,8 +112,8 @@ func TestPreparePostRoundTripsArraysMetaBinaryAndTimes(t *testing.T) {
 	if nexErr != nil {
 		t.Fatal(nexErr.Message)
 	}
-	if id < 940000 {
-		t.Fatalf("generated id %d below 940000", id)
+	if id < database.FirstLocalID {
+		t.Fatalf("generated id %d below 2^32", id)
 	}
 
 	// * not visible until upload completes
@@ -406,5 +409,35 @@ func TestCatalogSurvivesReopen(t *testing.T) {
 	var id uint64
 	if err := database.DB.QueryRow(`INSERT INTO datastore.objects (owner) VALUES (1) RETURNING data_id`).Scan(&id); err != nil || id <= 5_000_002 {
 		t.Fatalf("id after reopen = %d err=%v (sequence must continue, not restart)", id, err)
+	}
+}
+
+// * an older catalog has a counter that followed the imported IDs (here 65,672,930): the start-up statement raises it to 2^32
+func TestAnOlderCatalogsCounterIsRaisedToTheLocalRange(t *testing.T) {
+	if _, err := database.DB.Exec(`UPDATE datastore.sqlite_sequence SET seq = 65672930 WHERE name = 'objects'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := database.DB.Exec(`UPDATE datastore.sqlite_sequence SET seq = $1 WHERE name = 'objects' AND seq < $1`, database.FirstLocalID-1); err != nil {
+		t.Fatal(err)
+	}
+
+	var id uint64
+	if err := database.DB.QueryRow(`INSERT INTO datastore.objects (owner) VALUES (1) RETURNING data_id`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+
+	if id < database.FirstLocalID {
+		t.Fatalf("id %d is below 2^32", id)
+	}
+
+	// * a counter that is already higher is left alone
+	var seq int64
+	if _, err := database.DB.Exec(`UPDATE datastore.sqlite_sequence SET seq = $1 WHERE name = 'objects' AND seq < $1`, database.FirstLocalID-1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := database.DB.QueryRow(`SELECT seq FROM datastore.sqlite_sequence WHERE name = 'objects'`).Scan(&seq); err != nil || seq != int64(id) {
+		t.Fatalf("seq %d err %v, want %d", seq, err, id)
 	}
 }

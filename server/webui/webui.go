@@ -295,7 +295,7 @@ func (s *server) levels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		l.Code = coursecode.Format(uint32(l.ID))
+		l.Code = coursecode.Format(uint64(l.ID))
 		out = append(out, l)
 	}
 
@@ -348,7 +348,7 @@ func (s *server) level(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row.Code = coursecode.Format(uint32(row.ID))
+	row.Code = coursecode.Format(uint64(row.ID))
 
 	c, err := s.chunks(id)
 	if err != nil {

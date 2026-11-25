@@ -112,6 +112,8 @@ The level drawing uses the sprites and the object tables of [HerobrineTV's SMM1 
 
 ## How archived levels work
 
+**Uploaded levels never collide with archived ones.** The course ID the game shows is a checksum plus 12 hex digits of data ID, and every archived level has an ID below 2^32, so the second group of its code reads `0000`. Levels players upload to this server get IDs from 2^32 up (`XXXX-0001-XXXX-XXXX` and higher), which no archived level can have. An older data folder is moved to that range the first time the new version starts; levels uploaded before keep the IDs and codes they have.
+
 The official servers are gone, but volunteers saved the levels. The server uses two public services, at a low request rate:
 
 - the metadata API behind [HerobrineTV's SMM1 Level Downloader](https://github.com/HerobrineTV/SMM1-Level-Downloader) (`api.bobac-analytics.com`): per level the name, creator PID, clears, failures and attempts, stars, upload time and the original download URL. **Clear rate = clears / attempts**, the win rate;

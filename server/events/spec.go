@@ -154,7 +154,7 @@ func FromJSON(raw []byte) ([]Event, error) {
 		// * the menu opens one course per entry, so a list becomes one entry per course
 		for i, id := range ids {
 			if seen[id] {
-				return nil, fmt.Errorf("event %d: course %s is listed twice", n+1, coursecode.Format(uint32(id)))
+				return nil, fmt.Errorf("event %d: course %s is listed twice", n+1, coursecode.Format(uint64(id)))
 			}
 
 			seen[id] = true

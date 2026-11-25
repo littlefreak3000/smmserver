@@ -73,7 +73,7 @@ func eventsDump(path string) int {
 	fmt.Printf("%d events\n", len(list))
 
 	for _, e := range list {
-		fmt.Printf("%s  %s .. %s  pack %-14q  %s / %s\n", coursecode.Format(uint32(e.ID)), e.Start.Format("2006-01-02 15:04"), e.End.Format("2006-01-02 15:04"), e.Pack, e.Title[1], e.Title[0])
+		fmt.Printf("%s  %s .. %s  pack %-14q  %s / %s\n", coursecode.Format(uint64(e.ID)), e.Start.Format("2006-01-02 15:04"), e.End.Format("2006-01-02 15:04"), e.Pack, e.Title[1], e.Title[0])
 	}
 
 	return 0
@@ -143,7 +143,7 @@ func eventsBuild(args []string) int {
 	}
 
 	for _, e := range list {
-		fmt.Printf("  %s  %s\n", coursecode.Format(uint32(e.ID)), e.Title[1])
+		fmt.Printf("  %s  %s\n", coursecode.Format(uint64(e.ID)), e.Title[1])
 	}
 
 	fmt.Printf("wrote %s: %d menu entries, %d bytes. A running server picks it up when the game next opens Course World; no restart is needed.\n", *out, len(list), len(b))

@@ -43,7 +43,7 @@ All numbers are big-endian. All text is UTF-16BE, NUL-terminated inside a fixed-
 
 ## Course IDs: what the game shows and what the server sees
 
-The game shows a course by a code such as `9007-0000-00BB-FD3B`; the servers (and the log) use a **data ID**, here `12320059`. They are the same number in two forms: the last eight hex digits of the code are the data ID, the second group is `0000`, and the first group is a checksum. The checksum is the HMAC-MD5 of the data ID as 8 little-endian bytes, keyed with the MD5 of the text `9f2b4678` (the game's access key), taking bytes 3 and 2 of the result as the group. The scheme comes from the Pretendo wiki ("datastore codes"); it matched two real codes, the wiki's example and one shown by the game for a level the server served as data ID 12320059 (Cemu).
+The game shows a course by a code such as `9007-0000-00BB-FD3B`; the servers (and the log) use a **data ID**, here `12320059`. They are the same number in two forms: the last twelve hex digits of the code are the data ID (the second group is its top 16 bits: `0000` for every archived level, whose IDs are below 2^32), and the first group is a checksum. The checksum is the HMAC-MD5 of the data ID as 8 little-endian bytes, keyed with the MD5 of the text `9f2b4678` (the game's access key; for an ID above 2^32 the 8 bytes simply hold the larger number), taking bytes 3 and 2 of the result as the group. The scheme comes from the Pretendo wiki ("datastore codes"); it matched two real codes, the wiki's example and one shown by the game for a level the server served as data ID 12320059 (Cemu).
 
 ```
 smm-server code 9007-0000-00BB-FD3B     # -> data ID 12320059

@@ -17,7 +17,7 @@ func UploadCourseRecord(err error, packet nex.PacketInterface, callID uint32, pa
 
 	client := packet.Sender()
 
-	globals.Tracef("UploadCourseRecord level %d (course ID %s) slot %d score %d", param.DataID, coursecode.Format(uint32(param.DataID)), param.Slot, param.Score)
+	globals.Tracef("UploadCourseRecord level %d (course ID %s) slot %d score %d", param.DataID, coursecode.Format(uint64(param.DataID)), param.Slot, param.Score)
 
 	// * so the archived first clear and record are in place first: the upload must not become the "first clear"
 	if EnsureRecord != nil {

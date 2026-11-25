@@ -133,8 +133,19 @@ func Connect(path string) {
 		globals.Logger.Warningf("Could not move archive levels out of the profile slot: %s", err.Error())
 	}
 
+	// * levels players upload get IDs from 2^32 up, which no archived level has (see FirstLocalID); an older catalog's counter
+	// * is raised to it. Levels uploaded before keep the IDs they have.
+	if _, err := DB.Exec(`UPDATE datastore.sqlite_sequence SET seq = $1 WHERE name = 'objects' AND seq < $1`, FirstLocalID-1); err != nil {
+		globals.Logger.Warningf("Could not move the ID counter of uploaded levels: %s", err.Error())
+	}
+
 	ensureEventCourseMetaDataFileExists()
 }
+
+// FirstLocalID is the first data ID given to a level a player uploads: 2^32. The course ID the game shows is a checksum and
+// 48 bits of data ID, and every archived level has an ID below 2^32 (the second group of its course ID reads 0000), so the
+// IDs from here up can never collide with an archived level.
+const FirstLocalID = 1 << 32
 
 //go:embed schema.sql
 var schemaSQL string
