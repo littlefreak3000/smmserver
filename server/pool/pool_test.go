@@ -31,6 +31,7 @@ type fake struct {
 	missingFor                        map[string]bool // URLs with no capture at all
 	randomErr, levelErr               error
 	randomCalls, levelCalls, binCalls int
+	drawDelay, binDelay               time.Duration // how long a draw or a file download takes (0 = no time at all)
 }
 
 func newFake(t *testing.T) *fake {
@@ -60,6 +61,8 @@ func newFake(t *testing.T) *fake {
 }
 
 func (f *fake) RandomLevel(ctx context.Context, n int) (*upstream.Level, error) {
+	time.Sleep(f.drawDelay)
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -99,6 +102,8 @@ func (f *fake) Level(ctx context.Context, id int64) (*upstream.Level, error) {
 }
 
 func (f *fake) FetchBin(ctx context.Context, u string) ([]byte, error) {
+	time.Sleep(f.binDelay)
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -693,4 +698,36 @@ func TestACeilingStopsThePoolFromKeepingTooEasyLevels(t *testing.T) {
 	if above != 0 {
 		t.Fatalf("%d levels above the ceiling were kept", above)
 	}
+}
+
+// * draws and downloads happen at the same time: with a draw taking 4 ms and a download 40 ms, a loop that does one thing at a
+// * time needs the sum of both, and the fill must need clearly less. (Draws are cheap here on purpose: when the rare band is
+// * waiting for a lucky draw, the draws set the pace and no amount of overlap can speed that part up.)
+func TestDrawsAndDownloadsOverlap(t *testing.T) {
+	f := newFake(t)
+	f.drawDelay = 4 * time.Millisecond
+	f.binDelay = 40 * time.Millisecond
+
+	p, _ := setup(t, f)
+	p.TargetPerBand = 5
+
+	start := time.Now()
+
+	st, err := p.Fill(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	elapsed := time.Since(start)
+	oneAtATime := time.Duration(st.Draws)*f.drawDelay + time.Duration(st.Imported)*f.binDelay
+
+	if st.Imported != 20 {
+		t.Fatalf("imported %d, want 20 (4 bands x 5)", st.Imported)
+	}
+
+	if elapsed > oneAtATime*8/10 {
+		t.Fatalf("the fill took %v for %d draws and %d downloads; one at a time would take about %v", elapsed, st.Draws, st.Imported, oneAtATime)
+	}
+
+	t.Logf("fill took %v, one at a time would take about %v", elapsed.Round(time.Millisecond), oneAtATime.Round(time.Millisecond))
 }
