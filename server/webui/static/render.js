@@ -278,7 +278,13 @@ const SMMRender = (() => {
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    const objs = course.objects.filter((o) => options.hidden || o.type !== 29).sort((a, b) => a.z - b.z);
+    // * every course file holds a 14 wide castle bridge (type 49) that ends at the goal, in every theme: it belongs to the goal
+    // * and the game only shows it in castle courses (it leads to the axe). Bridges a maker placed elsewhere are kept.
+    const goals = course.objects.filter((o) => !o.block && o.type === 27);
+    const goalBridge = (o) => o.type === 49 && o.w === 14 && goals.some((g) => Math.abs(o.x + o.w - g.x) <= 1);
+    const objs = course.objects
+      .filter((o) => (options.hidden || o.type !== 29) && (course.themeName === 'castle' || !goalBridge(o)))
+      .sort((a, b) => a.z - b.z);
     const block = await load(`sprites/titleset/${mode}-${course.themeName}.png`);
     const mon = await load(`sprites/monster/${mode}.png`);
 
