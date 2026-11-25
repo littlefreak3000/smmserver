@@ -319,7 +319,12 @@ func startHomeAccount() {
 
 // startConsoleProxy starts the proxy a Wii U patched with Inkay uses to reach this server (see docs/setup-wiiu.md).
 // SMM_PROXY_PORT=0 turns it off. It only answers the account service, the connection test and the course downloads.
+// passThrough says whether the Wii U pass-through to the real Pretendo is on: it is, unless SMM_PROXY_PRETENDO=0.
+var passThrough = true
+
 func startConsoleProxy(account http.Handler, learn func(userID string, pid uint32)) {
+	passThrough = getenv("SMM_PROXY_PRETENDO", "1") != "0"
+
 	port := getenv("SMM_PROXY_PORT", "8888")
 	if port == "0" {
 		return
@@ -336,9 +341,9 @@ func startConsoleProxy(account http.Handler, learn func(userID string, pid uint3
 		AnswerRefusals: getenv("SMM_PROXY_ANSWER", "") == "1",
 		// * SMM_PROXY_DROP_ALL=1 (diagnostics only): reset every connection to the proxy port
 		DropAll: getenv("SMM_PROXY_DROP_ALL", "") == "1",
-		// * SMM_PROXY_PRETENDO=1: the console's own programs keep using the real Pretendo Network through the proxy (needs a
+		// * SMM_PROXY_PRETENDO (on unless 0): the console's own programs keep using the real Pretendo Network through the proxy (needs a
 		// * Pretendo account on the console); only games are answered here
-		Pretendo: getenv("SMM_PROXY_PRETENDO", "") == "1",
+		Pretendo: passThrough,
 		// * in pass-through mode the real player ID of each account is read from Pretendo's profile reply
 		LearnProfile: learn,
 	})
@@ -636,8 +641,9 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_NARROW_NORMAL=1
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
-# Wii U with Inkay: by default only the game is answered and the console's own programs (Wii U Menu, friends, Miiverse) are left
-# alone. 1 sends them on to the real Pretendo Network instead (needs a Pretendo account on the console).
+# Wii U with Inkay: the console's own programs (Wii U Menu, friends, Miiverse) are sent on to the real Pretendo Network, which also
+# lets the server learn each account's real player ID (needs a Pretendo account on the console). 0 answers only the game and
+# leaves the rest alone; then "smm-server account adopt" is needed to give the account its real player ID.
 #SMM_PROXY_PRETENDO=1
 # Size limit for the downloaded levels, in megabytes. When they take more, the oldest levels are removed (levels you starred or
 # made are kept; the game can fetch a removed level again). 0 = no limit (the default). Only used while fetching is on.
@@ -794,6 +800,14 @@ func printBanner() {
 		b.WriteString("          your connection > Change Settings > Proxy Settings > Set, then enter:\n")
 		fmt.Fprintf(&b, "              proxy server:  %s\n", publicHost)
 		fmt.Fprintf(&b, "              port:          %s        (choose \"Don't Use Authentication\")\n", proxyPort)
+
+		if passThrough {
+			b.WriteString("          The console's own programs and the account's real player ID come from the real Pretendo\n")
+			b.WriteString("          (needs a Pretendo account on the console). SMM_PROXY_PRETENDO=0 turns that off.\n")
+		} else {
+			b.WriteString("          Games only: the console's own programs are left alone, so the account's player ID must be\n")
+			b.WriteString("          set with \"smm-server account adopt\" (docs/setup-wiiu.md).\n")
+		}
 	}
 
 	fmt.Fprintf(&b, "\n   If the console cannot connect, allow in the firewall: TCP %s, %s", getenv("SMM_ACCOUNT_PORT", "8080"), getenv("SMM_S3_PORT", "9000"))

@@ -60,7 +60,7 @@ ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" becau
    - Run "${t.exe} account <path to the account.dat>" (or "${t.exe} account new <name> <path to Cemu's mlc01>") so the account's
      player ID matches this server. Close Cemu first.
    - In Cemu: Options > General settings > Account > Network Service: Custom.
-   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; it works on a tested console. The server answers only the game; the console's own programs are left alone.
+   A modded Wii U (Inkay) is described in docs${t.goos === 'windows' ? '\\' : '/'}setup-wiiu.md; it works on a tested console. The server answers only the game and sends the console's own programs on to the real Pretendo (needs a Pretendo account on the console; set SMM_PROXY_PRETENDO=0 to turn that off).
 
 4. STOP IT
    Press Ctrl+C in the window. This saves the level list. Copy or move the "data" folder only while the server is stopped.

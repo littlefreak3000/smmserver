@@ -19,8 +19,8 @@ The console logs in for its own programs too (the Wii U Menu, the friend list, M
 
 | Mode | The game | The console's own programs | Needs |
 |---|---|---|---|
-| **Games only** (default) | answered by this server | **not answered** (the log says `dropping ... from the system title ...`); the console behaves as if offline until the game asks | nothing |
-| **Pretendo pass-through** (`SMM_PROXY_PRETENDO=1`) | answered by this server | sent on to the **real Pretendo Network**: their logins go to Pretendo's account server and every other `pretendo.cc` host (friends, Miiverse, SpotPass, shop) is tunnelled through | a Pretendo account on the console |
+| **Pretendo pass-through** (default; `SMM_PROXY_PRETENDO=1`) | answered by this server | sent on to the **real Pretendo Network**: their logins go to Pretendo's account server and every other `pretendo.cc` host (friends, Miiverse, SpotPass, shop) is tunnelled through | a Pretendo account on the console |
+| **Games only** (`SMM_PROXY_PRETENDO=0`) | answered by this server | **not answered** (the log says `dropping ... from the system title ...`); the console behaves as if offline until the game asks | nothing, but the account's player ID has to be set with `account adopt` |
 
 In games-only mode the Wii U Menu may look signed out of the network (a password prompt, friends offline). That is expected: do not enter anything. In pass-through mode the rest of the console works as if Pretendo were connected directly. The console's login request, including its password hash, then goes to Pretendo through this server, exactly as it would directly; the server does not log it, but it passes through. Keep this on your own network.
 
@@ -46,7 +46,7 @@ Inkay only supports the release version of Aroma set up to start automatically. 
 
 The console keeps a **player ID** (PID) for its network account, and it **rejects a login whose profile carries a different one**. The symptom is error 102-2932 on the console, and in the server's log a `login` and a `profile` request from the game with no `nex_token` request after them. The server cannot make the ID up: for a name it has not seen it derives a number from the name, which is almost never the account's real ID. There are two ways to give it the real one:
 
-- **Pass-through mode (`SMM_PROXY_PRETENDO=1`, see section 3): nothing to do.** The console's own programs log in to the real Pretendo through this server, and the server reads the real player ID out of Pretendo's profile reply and keeps it. The log says `account: learned the real player ID of "<name>" from Pretendo: <number>`. This happens at boot, before the game asks. It needs a Pretendo account on the console.
+- **Pass-through mode (the default, `SMM_PROXY_PRETENDO=1`): nothing to do.** The console's own programs log in to the real Pretendo through this server, and the server reads the real player ID out of Pretendo's profile reply and keeps it. The log says `account: learned the real player ID of "<name>" from Pretendo: <number>`. This happens at boot, before the game asks. It needs a Pretendo account on the console.
 - **`smm-server account adopt` with the console's account file**, for games-only mode or a console without a Pretendo account:
 
   1. Run **Dumpling** on the Wii U and dump the online files (as in the Cemu guide). In the dump, open `<user>/mlc01/usr/save/system/act/<number>/account.dat` for the user you will play as. The line `PrincipalId=` holds the ID in hex.
@@ -65,7 +65,7 @@ This server cannot create or link accounts (a console's account screens need man
 ## 3. Point the console at the server
 
 1. Start the server. The box it prints shows this PC's address and the exact proxy settings to type on the console. If the PC has several network addresses the box lists the others; set `SMM_PUBLIC_HOST` in `data/settings.env` if it picked the wrong one. Allow **TCP 8080, 8888 and 9000** and **UDP 60000 and 60001** in the PC's firewall, **for every network type** (see the table: Windows' own prompt only allows Private networks). `SMM_PROXY_PORT` changes the proxy port; `0` turns it off.
-2. Optional, for pass-through mode: put `SMM_PROXY_PRETENDO=1` in `data/settings.env` and restart.
+2. Pass-through mode is on by default and needs a Pretendo account on the console. Without one, put `SMM_PROXY_PRETENDO=0` in `data/settings.env`, restart, and use `account adopt` (section 2).
 3. On the Wii U open **System Settings > Internet > Connect to the Internet > Connection List**, choose the connection the console uses (the one with the Wii U logo), then **Change Settings**.
 4. Go to the page with **Proxy Settings**, choose **Set**, press OK, and enter:
    - proxy server: this PC's address
@@ -119,7 +119,7 @@ Run the server with `SMM_TRACE=1` (in `data/settings.env`, or as an environment 
 
 These are for tracking down problems, set as environment variables or in `data/settings.env`:
 
-- `SMM_PROXY_PRETENDO=1`: pass-through mode (above).
+- `SMM_PROXY_PRETENDO=0`: games-only mode (above); pass-through is the default.
 - `SMM_ACCOUNT_SYSTEM_TITLES=1`: answer the console's own programs like a game (this brings back the launch stall).
 - `SMM_PROXY_ANSWER=1`: answer hosts the server does not serve with HTTP errors instead of dropping the connection.
 - `SMM_PROXY_SPOTPASS=1`: accept SpotPass connections and log what they ask, instead of dropping them.

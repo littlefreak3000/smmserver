@@ -310,7 +310,7 @@ func (s *Service) PIDFor(nnid string) (uint32, error) {
 		_, err := s.cfg.DB.Exec(`INSERT INTO datastore.accounts (nnid, pid, created) VALUES ($1, $2, $3)`, nnid, pid, s.cfg.Now().UTC())
 		if err == nil {
 			s.cfg.Logf("account: registered %q as PID %d", nnid, pid)
-			s.cfg.Logf("account: that player ID is made up from the name. A Wii U whose account has another one rejects it (error 102-2932): turn on SMM_PROXY_PRETENDO=1 so the real one is learned from Pretendo, or run \"smm-server account adopt\" (docs/setup-wiiu.md)")
+			s.cfg.Logf("account: that player ID is made up from the name. A Wii U whose account has another one rejects it (error 102-2932): the real one is learned from Pretendo while SMM_PROXY_PRETENDO is not 0 and the console's own programs have logged in, otherwise run \"smm-server account adopt\" (docs/setup-wiiu.md)")
 			return pid, nil
 		}
 

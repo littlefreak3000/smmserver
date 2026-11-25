@@ -78,7 +78,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
 | `SMM_DIFFICULTY_PRIOR` | How levels are sorted by difficulty: `off` (raw clear rate) or `MEAN,STRENGTH` | `0.2,3` |
 | `SMM_TRACE` | `1` logs every request the game makes; only for tracking down problems | off |
-| `SMM_PROXY_PRETENDO` | `1` lets a Wii U's own programs (Wii U Menu, friends, Miiverse) keep using the real Pretendo Network through the proxy; needs a Pretendo account on the console, and the server then learns each account's real player ID from Pretendo, so no account file is needed. By default only the game is answered and the rest is dropped (see [docs/setup-wiiu.md](docs/setup-wiiu.md)) | off |
+| `SMM_PROXY_PRETENDO` | A Wii U's own programs (Wii U Menu, friends, Miiverse) keep using the real Pretendo Network through the proxy, and the server learns each account's real player ID from Pretendo, so no account file is needed. Needs a Pretendo account on the console. `0` answers only the game and drops the rest (then `smm-server account adopt` gives the account its real ID; see [docs/setup-wiiu.md](docs/setup-wiiu.md)) | `1` (on) |
 | `SMM_DATA_DIR` | A different data folder | `./data` |
 
 Ports: account service 8080 (`SMM_ACCOUNT_PORT`, 0 = off), Wii U proxy 8888 (`SMM_PROXY_PORT`, 0 = off), course downloads 9000 (`SMM_S3_PORT`), NEX authentication 60000 and secure 60001 (UDP). Allow them in the firewall if the console or Cemu cannot connect. `SMM_PUBLIC_HOST` is also the address the console uses to download courses. Setting `PN_SMM_CONFIG_S3_ENDPOINT` switches back to an external S3, and any `PN_*` variable you set yourself wins over the generated defaults.
@@ -186,7 +186,7 @@ No level files are committed. The few tests that need a real course file are ski
 
 ## Status and known limits
 
-**Works.** In Cemu 2.6 (USA, v240) the game logs in, lists levels from Course World and 100 Mario Challenge, downloads and plays them, and shows creator Miis and names in lists and on clear screens. A NEX client test (`tools/nex-smoke`) also covers login and downloads without the game. On a real Wii U (Aroma + Inkay, USA, v240) the game starts, logs in, lists Course World and 100 Mario Challenge levels, downloads and plays them, and the played-levels history records them. The proxy answers only the game by default: if it also answered the console's own programs (Wii U Menu, friend list, Miiverse), starting a game stalled on its loading screen. `SMM_PROXY_PRETENDO=1` sends those on to the real Pretendo instead.
+**Works.** In Cemu 2.6 (USA, v240) the game logs in, lists levels from Course World and 100 Mario Challenge, downloads and plays them, and shows creator Miis and names in lists and on clear screens. A NEX client test (`tools/nex-smoke`) also covers login and downloads without the game. On a real Wii U (Aroma + Inkay, USA, v240) the game starts, logs in, lists Course World and 100 Mario Challenge levels, downloads and plays them, and the played-levels history records them. The proxy answers only the game: if it also answered the console's own programs (Wii U Menu, friend list, Miiverse), starting a game stalled on its loading screen. By default it sends those on to the real Pretendo (`SMM_PROXY_PRETENDO`, on unless `0`), which also lets it learn the account's real player ID.
 
 **Not tried.**
 
