@@ -783,3 +783,45 @@ func TestTheRealArchiveIsDrawnFromAboveTheEmptyPartOfItsIndex(t *testing.T) {
 		t.Fatalf("a pool with its own space was shifted: %v", f2.indexes)
 	}
 }
+
+func TestChallengeRangesFollowTheBands(t *testing.T) {
+	// * the default bands: one button each
+	got, err := pool.ChallengeRanges(pool.DefaultBands)
+	if err != nil || got != [4][2]int64{{0, 4}, {5, 19}, {20, 49}, {50, 100}} {
+		t.Fatalf("default bands: %v, %v", got, err)
+	}
+
+	// * more bands are shared out evenly, lowest bands to Super Expert, highest to Easy
+	six, _ := pool.ParseBands("10,20,30,40,50")
+	if got, _ := pool.ChallengeRanges(six); got != [4][2]int64{{0, 9}, {10, 29}, {30, 39}, {40, 100}} {
+		t.Fatalf("six bands: %v", got)
+	}
+
+	// * every range starts where the one below ends
+	for _, s := range []string{"5,20,50", "10,30,60,85", "10,20,30,40,50,60,70,80", "1,2,3"} {
+		bands, _ := pool.ParseBands(s)
+
+		r, err := pool.ChallengeRanges(bands)
+		if err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+
+		if r[0][0] != 0 || r[3][1] != 100 {
+			t.Errorf("%s: does not cover 0-100: %v", s, r)
+		}
+
+		for k := 1; k < 4; k++ {
+			if r[k][0] != r[k-1][1]+1 {
+				t.Errorf("%s: gap or overlap between buttons %d and %d: %v", s, k-1, k, r)
+			}
+		}
+	}
+
+	// * fewer than four bands cannot give each button its own
+	for _, s := range []string{"50", "30,60"} {
+		bands, _ := pool.ParseBands(s)
+		if _, err := pool.ChallengeRanges(bands); err == nil {
+			t.Errorf("%s: accepted", s)
+		}
+	}
+}

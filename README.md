@@ -73,8 +73,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 | `SMM_FETCH` | `0` runs the server fully offline, with only the levels already downloaded | on |
 | `SMM_POOL_TARGET` | Levels kept ready in each of four clear-rate bands (1,000 per band is 4,000 levels, about 190 MB; set it lower for a smaller, quicker first start) | 1000 |
 | `SMM_DIFFICULTY_CEILING` | The highest clear rate, in percent, a level may have to be kept and offered in difficulty lists (1 to 100). Set it below 100, for example `80`, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists (100 Mario Challenge, the difficulty filter) skip any it already holds. Newest and most-starred lists are not filtered | `100` (off) |
-| `SMM_NARROW_NORMAL` | The 100 Mario Challenge asks for Normal as the failure rates 0-74, which includes Easy (0-34). By default the server serves 35-74 (clear rate 26-65 %) so Normal does not overlap Easy. `0` serves the range as the game asks for it | `1` (on) |
-| `SMM_POOL_BANDS` | Where the pool's bands end, in percent clear rate: rising whole numbers from 1 to 99, at most 8. `5,20,50` means the bands 0-5, 5-20, 20-50 and 50-100 %. The pool keeps the same number of levels in every band. Cache builds always use the default edges, so a seed keeps its meaning | `5,20,50` |
+| `SMM_POOL_BANDS` | Where the difficulty bands end, in percent clear rate: rising whole numbers from 1 to 99, at least 3 and at most 8. `5,20,50` means the bands 0-5, 5-20, 20-50 and 50-100 %. The pool keeps the same number of levels in every band, **and the game's four difficulty buttons (Super Expert, Expert, Normal, Easy) ask for exactly these bands**: with 4 bands each button is one band, with more they are shared out evenly. Cache builds always use the default edges, so a seed keeps its meaning | `5,20,50` |
 | `SMM_POOL_GROW_EVERY`, `SMM_POOL_GROW_BY`, `SMM_POOL_MAX` | Slow growth of the pool (see below) | 10m, 1, 1000 |
 | `SMM_HISTORY_LEVELS` | How many of each player's most recently played levels the server remembers so lists skip them (`off` = none) | 1000 |
 | `SMM_CACHE_MAX_MB` | Size limit for downloaded levels; the oldest are removed beyond it | 0 (off) |
@@ -217,7 +216,7 @@ No level files are committed. The few tests that need a real course file are ski
 **Open questions and guesses.**
 
 - The three unknown `meta_binary` fields, the courses' `data_type` (3), which custom-ranking application ID means "stars" (the importer uses 0), and the exact bands the game uses for Easy, Normal, Expert and Super Expert. Difficulty uses `300000000` in percent; the only sample seen is `300000000 1 49 0`. With `SMM_TRACE=1` the server logs `GetCustomRanking app=<id>`, which shows what the game asks for.
-- Whether the game accepts a listed level whose size and `meta_binary` are still empty (set `SMM_LIST_WAIT` if it does not), whether it reshuffles a list on the console, and how the Course World filter maps to clear rate (it is read as a failure rate: Easy 0-34 becomes clear rate 66-100).
+- Whether the game accepts a listed level whose size and `meta_binary` are still empty (set `SMM_LIST_WAIT` if it does not), whether it reshuffles a list on the console, and whether the failure-rate ranges the server uses to recognise the four difficulty buttons (Easy 0-34, Normal 0-74 or 35-74, Expert 75-95, Super Expert 96-100) are what every game version sends.
 - `900000.bin` (the event-course metadata Course World needs) is not available. The server creates an empty placeholder and warns.
 
 **Lost in the archive.**

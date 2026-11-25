@@ -301,7 +301,14 @@ func startSelection() {
 	}
 
 	nex_datastore_super_mario_maker.Selector = sel
-	nex_datastore_super_mario_maker.NarrowNormal = getenv("SMM_NARROW_NORMAL", "1") != "0"
+
+	// * the four difficulty buttons ask for the pool's bands
+	if ranges, err := pool.ChallengeRanges(poolBands()); err == nil {
+		nex_datastore_super_mario_maker.ChallengeRanges = &ranges
+		globals.Logger.Infof("Difficulty buttons (clear rate): Super Expert %d-%d%%, Expert %d-%d%%, Normal %d-%d%%, Easy %d-%d%% (the pool's bands, SMM_POOL_BANDS)",
+			ranges[0][0], ranges[0][1], ranges[1][0], ranges[1][1], ranges[2][0], ranges[2][1], ranges[3][0], ranges[3][1])
+	}
+
 	nex_datastore_super_mario_maker.NNIDForPID = func(pid uint32) string {
 		var nnid string
 		if err := database.DB.QueryRow(`SELECT nnid FROM accounts WHERE pid = $1`, pid).Scan(&nnid); err != nil {

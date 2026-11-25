@@ -76,7 +76,13 @@ func startWebUI() {
 func validateSetting(key, value string) error {
 	switch key {
 	case "SMM_POOL_BANDS":
-		_, err := pool.ParseBands(value)
+		bands, err := pool.ParseBands(value)
+		if err != nil {
+			return err
+		}
+
+		_, err = pool.ChallengeRanges(bands)
+
 		return err
 	case "SMM_DIFFICULTY_CEILING":
 		if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 100 {

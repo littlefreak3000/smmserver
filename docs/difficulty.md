@@ -78,26 +78,29 @@ So a list for a range is mostly its own levels, with a few levels from next door
 
 An index built with a prior is drawn this way and an index built without is not, so **the prior is part of the index's fingerprint**, and with it of every challenge code: two players whose codes match drew from the same kind of index. An index without a prior keeps the fingerprint it always had.
 
-## What the game asks for, and Normal
+## What the game asks for: the buttons follow the bands
 
-The game sends a failure-rate range, which the server turns into a clear-rate range (`100 - max` to `100 - min`):
+The game sends a failure-rate range for each difficulty button, which the server recognises:
 
-| Request | Failure rate | Clear rate |
-|---|---|---|
-| 100 Mario Challenge, Easy | 0-34 | 66-100 % |
-| 100 Mario Challenge, Normal | 0-74 | 26-100 % |
-| Course World, Normal filter | 35-74 | 26-65 % |
-| Expert | 75-95 | 5-25 % |
-| Super Expert | 96-100 | 0-4 % |
+| Button | What the game sends (failure rate) |
+|---|---|
+| Easy | 0-34 |
+| Normal | 0-74 in the 100 Mario Challenge, 35-74 in Course World |
+| Expert | 75-95 |
+| Super Expert | 96-100 |
 
-(Seen in the server log, `Recommended: asked 50 (extra=[...])`.) The Normal request of the 100 Mario Challenge starts at 0 and so reaches down into Easy: a level with a 96 % win rate is a legitimate answer. By default the server **narrows it to 35-74** (`SMM_NARROW_NORMAL`, `0` turns that off) so a Normal run does not contain Easy levels, and Easy, Expert and Super Expert keep their own ranges.
+(Seen in the server log, `Recommended: asked 50 (extra=[...])`.) The ranges themselves are **not** used. Each button is answered with the matching **band** of `SMM_POOL_BANDS`, lowest clear rate first: Super Expert, Expert, Normal, Easy. With the default `5,20,50` that is Super Expert 0-4 %, Expert 5-19 %, Normal 20-49 % and Easy 50-100 % clear rate, and the buttons never overlap, because the bands do not. The pool keeps the same stock in each band, so what a button asks for is what the pool holds.
+
+With more than 4 bands the buttons share them as evenly as possible: the k-th cut is at `floor(k * bands / 4)`, so 6 bands (`10,20,30,40,50`) give Super Expert 0-9 %, Expert 10-29 %, Normal 30-39 % and Easy 40-100 %. Fewer than 4 bands are refused (the setting falls back to the default with a warning), because a button would have no band. A request that is not one of the four buttons (any other failure-rate range) is answered as asked. The start-up log prints the clear-rate range of each button.
+
+This replaces `SMM_NARROW_NORMAL`, which is no longer used.
 
 ## Filtering out the easiest levels
 
 `SMM_DIFFICULTY_CEILING` (percent, 1 to 100, default 100) sets the highest difficulty score a level may have. Below 100 it does two things:
 
 - the pool's top band ends there instead of at 100 %, so a level whose score is above it belongs to no band and is never downloaded;
-- every difficulty request is cut off at the ceiling: a range that reaches past it stops there, "all difficulties" becomes 0 to the ceiling, and a range wholly above it (Easy, 66-100 %, under a ceiling of 60) gets the easiest levels that are allowed. The neighbouring-range rule above cannot reach past it either. Levels already in the catalog above the ceiling stay in the files but are not offered in difficulty lists.
+- every difficulty request is cut off at the ceiling: a range that reaches past it stops there, "all difficulties" becomes 0 to the ceiling, and a range wholly above it (a top band of 50-100 %, under a ceiling of 40) gets the easiest levels that are allowed. The neighbouring-range rule above cannot reach past it either. Levels already in the catalog above the ceiling stay in the files but are not offered in difficulty lists.
 
 It applies to the difficulty lists only (the 100 Mario Challenge and the difficulty filter). The newest and most-starred lists, and the whole-archive index (where the neighbouring-range rule can still reach a few points above), are not filtered. The ceiling must lie above the start of the pool's top band (50 % by default, see `SMM_POOL_BANDS` in the README).
 

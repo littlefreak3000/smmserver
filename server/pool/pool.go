@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand/v2"
 	"strconv"
 	"strings"
@@ -85,6 +86,35 @@ func ParseBands(s string) ([]Band, error) {
 
 	// * the top band reaches 100%: Max is a little above 1 so a score of exactly 1 belongs to it
 	return append(bands, Band{fmt.Sprintf("%d-100%%", lo), float64(lo) / 100, 1.0000001}), nil
+}
+
+// ChallengeRanges turns the bands into what the four difficulty buttons of the game ask for, as clear-rate ranges in percent
+// (both ends inclusive), in the order Super Expert, Expert, Normal, Easy. The lowest bands are Super Expert and the highest
+// are Easy. With exactly 4 bands each button is one band; with more, the bands are shared out as evenly as possible (the cut
+// between two buttons is floor(k * bands / 4) for the k-th, so with 6 bands Expert and Easy get two bands each). There must be
+// at least 4 bands, so that every button has a band of its own.
+func ChallengeRanges(bands []Band) ([4][2]int64, error) {
+	var out [4][2]int64
+
+	n := len(bands)
+	if n < 4 {
+		return out, fmt.Errorf("the four difficulty buttons need at least 4 bands (3 edges), but there are %d", n)
+	}
+
+	for k := 0; k < 4; k++ {
+		first, last := k*n/4, (k+1)*n/4-1
+
+		lo := int64(math.Round(bands[first].Min * 100))
+		hi := int64(math.Round(bands[last].Max*100)) - 1 // * a band ends where the next one starts: the edge belongs to the upper band
+
+		if bands[last].Max > 1 {
+			hi = 100
+		}
+
+		out[k] = [2]int64{lo, hi}
+	}
+
+	return out, nil
 }
 
 // WithCeiling returns the bands with the top one cut off at pct percent: levels whose difficulty score is above it belong to

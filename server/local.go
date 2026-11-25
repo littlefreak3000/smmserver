@@ -482,17 +482,12 @@ func startFetching() {
 	}
 
 	// * SMM_POOL_BANDS: where the pool's bands end, in percent (default 5,20,50 = 0-5%, 5-20%, 20-50%, 50-100%);
-	// * SMM_DIFFICULTY_CEILING cuts the top band off below 100%
-	if raw, ceil := getenv("SMM_POOL_BANDS", ""), difficultyCeiling(); raw != "" || ceil < 100 {
-		bands := append([]pool.Band(nil), pool.DefaultBands...)
+	// * the four difficulty buttons of the game ask for exactly these bands; SMM_DIFFICULTY_CEILING cuts the top band off
+	// * below 100%
+	baseBands := poolBands()
 
-		if raw != "" {
-			if parsed, err := pool.ParseBands(raw); err != nil {
-				globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
-			} else {
-				bands = parsed
-			}
-		}
+	if ceil := difficultyCeiling(); getenv("SMM_POOL_BANDS", "") != "" || ceil < 100 {
+		bands := baseBands
 
 		if capped, err := pool.WithCeiling(bands, ceil); err != nil {
 			globals.Logger.Warningf("SMM_DIFFICULTY_CEILING: %v; no ceiling is applied to the pool", err)
@@ -577,6 +572,31 @@ var (
 	ceilingPct  = 100
 )
 
+var (
+	bandsOnce sync.Once
+	bandsVal  []pool.Band
+)
+
+// poolBands reads SMM_POOL_BANDS (default 5,20,50): the bands of the pool, which the four difficulty buttons of the game ask for
+// too. Settings that cannot give each button a band are refused with a warning and the default is used.
+func poolBands() []pool.Band {
+	bandsOnce.Do(func() {
+		bandsVal = append([]pool.Band(nil), pool.DefaultBands...)
+
+		if raw := getenv("SMM_POOL_BANDS", ""); raw != "" {
+			if parsed, err := pool.ParseBands(raw); err != nil {
+				globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
+			} else if _, err := pool.ChallengeRanges(parsed); err != nil {
+				globals.Logger.Warningf("SMM_POOL_BANDS: %v; using the default 5,20,50", err)
+			} else {
+				bandsVal = parsed
+			}
+		}
+	})
+
+	return bandsVal
+}
+
 // difficultyCeiling reads SMM_DIFFICULTY_CEILING: the highest clear rate, in percent, a level may have to be stocked and
 // offered in difficulty lists. 100 (the default) means no ceiling; a lower value filters out the levels that are too easy.
 func difficultyCeiling() int {
@@ -630,16 +650,15 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
 #SMM_POOL_MAX=1000
-# Where the pool's difficulty bands end, in percent clear rate. The pool keeps the same number of levels in every band, so
-# this decides how much stock each difficulty gets. 5,20,50 means the bands 0-5%, 5-20%, 20-50% and 50-100% (the default);
-# for example 10,30,60,85 makes five bands. Rising whole numbers from 1 to 99, at most 8. Does not change cache builds.
+# Where the difficulty bands end, in percent clear rate. The pool keeps the same number of levels in every band, and the four
+# difficulty buttons of the game (Super Expert, Expert, Normal, Easy, lowest clear rate first) ask for exactly these bands:
+# 5,20,50 means 0-5%, 5-20%, 20-50% and 50-100% (the default). Rising whole numbers from 1 to 99, at least 3 (4 bands, one per
+# button) and at most 8; with more than 4 bands the buttons share them (6 bands: Expert and Easy get two each). Does not change
+# cache builds.
 #SMM_POOL_BANDS=5,20,50
 # Highest clear rate (percent) a level may have to be kept and offered in difficulty lists. 100 = no ceiling. Set it lower, for
 # example 80, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists skip any it holds.
 #SMM_DIFFICULTY_CEILING=100
-# The 100 Mario Challenge asks for "Normal" as the failure rates 0-74, which includes Easy (0-34). By default the server narrows
-# that to 35-74 so Normal does not overlap Easy. 0 gives the game's range as it asks for it (a mix of Easy and Normal levels).
-#SMM_NARROW_NORMAL=1
 # Levels remembered per player (a rolling window, so the file stays small): random lists offer other levels first. "off" turns it off.
 #SMM_HISTORY_LEVELS=1000
 # Wii U with Inkay: the console's own programs (Wii U Menu, friends, Miiverse) are sent on to the real Pretendo Network, which also
