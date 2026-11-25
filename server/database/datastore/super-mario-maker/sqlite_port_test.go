@@ -510,3 +510,76 @@ func TestUploadsGetIDsFromTheServersOwnRange(t *testing.T) {
 		t.Fatalf("upload back under A3F2: %d, want %d", back, first+3)
 	}
 }
+
+// * the game reads rating slots 5 and 6 of its own profile as "Expert / Super Expert unlocked": a profile starts with both at 1,
+// * while a course (or any other object) keeps the value the game asked for
+func TestANewProfileStartsWithExpertAndSuperExpertUnlocked(t *testing.T) {
+	create := func(dataType uint32) uint64 {
+		t.Helper()
+
+		param := datastore_types.NewDataStorePreparePostParam()
+		param.Size = 1
+		param.Name = "profile test"
+		param.DataType = types.NewUInt16(uint16(dataType))
+		param.MetaBinary = types.NewQBuffer([]byte{1})
+
+		id, nexErr := datastore_db.InitializeObjectByPreparePostParam(types.NewPID(77), param)
+		if nexErr != nil {
+			t.Fatal(nexErr.Message)
+		}
+
+		for slot := uint8(0); slot < 9; slot++ {
+			rating := datastore_types.NewDataStoreRatingInitParamWithSlot()
+			rating.Slot = types.NewInt8(int8(slot))
+
+			if nexErr := datastore_db.InitializeObjectRatingWithSlot(id, rating); nexErr != nil {
+				t.Fatal(nexErr.Message)
+			}
+		}
+
+		return id
+	}
+
+	values := func(id uint64) map[int]int64 {
+		t.Helper()
+
+		out := map[int]int64{}
+
+		rows, err := database.DB.Query(`SELECT slot, total_value FROM datastore.object_ratings WHERE data_id = $1`, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var slot int
+			var v int64
+
+			if err := rows.Scan(&slot, &v); err != nil {
+				t.Fatal(err)
+			}
+
+			out[slot] = v
+		}
+
+		return out
+	}
+
+	profile := values(create(1))
+	for slot := 0; slot < 9; slot++ {
+		want := int64(0)
+		if slot == datastore_db.ProfileExpertSlot || slot == datastore_db.ProfileSuperExpertSlot {
+			want = 1
+		}
+
+		if profile[slot] != want {
+			t.Errorf("profile slot %d = %d, want %d (all: %v)", slot, profile[slot], want, profile)
+		}
+	}
+
+	for slot, v := range values(create(3)) {
+		if v != 0 {
+			t.Errorf("course slot %d = %d, want 0", slot, v)
+		}
+	}
+}
