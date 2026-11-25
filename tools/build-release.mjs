@@ -65,6 +65,10 @@ ${t.goos === 'windows' ? `   - Windows may say "Windows protected your PC" becau
 4. STOP IT
    Press Ctrl+C in the window. This saves the level list. Copy or move the "data" folder only while the server is stopped.
 
+WEB PAGE
+   http://localhost:8081 shows the levels the server holds (click one to see the whole course) and lets you change the
+   settings without editing a file. It is only reachable from this computer.
+
 CHANGING THINGS
    data${t.goos === 'windows' ? '\\' : '/'}settings.env  (commented; remove the # in front of a line, save, restart). Useful settings:
    - SMM_PUBLIC_HOST   if the wrong network address was picked (must be an IPv4 address for Cemu)

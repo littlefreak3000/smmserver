@@ -173,4 +173,7 @@ func init() {
 
 	// * Whole-archive index and challenge seeds for the course lists (see selection_local.go)
 	startSelection()
+
+	// * The web page: level viewer and settings editor (see webui_local.go)
+	startWebUI()
 }

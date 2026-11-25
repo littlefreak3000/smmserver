@@ -17,6 +17,7 @@ Guides:
 
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+- [The web page: levels and settings](#the-web-page-levels-and-settings)
 - [How archived levels work](#how-archived-levels-work)
 - [Caches: the same levels on every computer](#caches-the-same-levels-on-every-computer)
 - [The whole archive and challenge seeds](#the-whole-archive-and-challenge-seeds)
@@ -67,6 +68,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 
 | Setting | Meaning | Default |
 |---|---|---|
+| `SMM_WEB_PORT` / `SMM_WEB_HOST` | Port of the [web page](#the-web-page-levels-and-settings) (0 = off) and who may open it (empty = this PC only) | 8081 / this PC only |
 | `SMM_PUBLIC_HOST` | Address the console or Cemu uses to reach the server (an IPv4 address; Cemu allows at most 15 characters) | detected |
 | `SMM_FETCH` | `0` runs the server fully offline, with only the levels already downloaded | on |
 | `SMM_POOL_TARGET` | Levels kept ready in each of four clear-rate bands (1,000 per band is 4,000 levels, about 190 MB; set it lower for a smaller, quicker first start) | 1000 |
@@ -97,6 +99,17 @@ smm-server account adopt <account.dat>     # use the ID already in an account fi
 ```
 
 To play as the creator of an imported level, point your name at their ID: `UPDATE accounts SET pid = <creator pid> WHERE nnid = '<you>'` in `catalog.sqlite`, after the first login created the row.
+
+## The web page: levels and settings
+
+When the server starts it also serves a web page, at **http://localhost:8081** (the address is printed in the start-up box). It has two tabs:
+
+- **Levels**: every level the server holds, with thumbnails, name, maker, clear rate, stars and plays. Search by name, maker or course ID (`XXXX-XXXX-XXXX-XXXX` or the number), sort, and filter by clear rate. Click a level to see the whole course drawn from its file, main area and subworld, with a zoom, a grid and a switch for hidden blocks. The drawing is a first version: terrain, blocks, pipes, coins and most enemies are drawn with sprites; tracks, rotated objects and things inside pipes are not drawn yet.
+- **Settings**: every line of `data/settings.env` with its help text and default. Saving rewrites only the lines you changed and keeps the comments. Most settings take effect after the server is restarted; changed ones are highlighted until then.
+
+The page can change the settings file and has no password, so it listens **on this PC only**. `SMM_WEB_HOST=0.0.0.0` opens it to your network (do that only on a network you trust), `SMM_WEB_PORT` changes the port and `SMM_WEB_PORT=0` turns it off. Requests that name anything but an IP address or `localhost`, and changes that are not JSON, are refused, so a web page on another site cannot change your settings through your browser.
+
+The level drawing uses the sprites and the object tables of [HerobrineTV's SMM1 Level Downloader](https://github.com/HerobrineTV/SMM1-Level-Downloader) (MIT licence).
 
 ## How archived levels work
 
@@ -221,7 +234,7 @@ Upstream quirk left as is: `InitializeObjectByPreparePostParam` builds `extraDat
 
 ## Security
 
-There are **no passwords**. The server never checks one, so anyone who can reach port 8080 can log in as any account, and the challenge-seed page has no password either. Run it on a home network only and never forward its ports on your router.
+There are **no passwords**. The server never checks one, so anyone who can reach port 8080 can log in as any account, and the challenge-seed page has no password either. The web page on port 8081 can change the settings file and has no password, so it only listens on the PC itself unless you set `SMM_WEB_HOST`. Run it on a home network only and never forward its ports on your router.
 
 ## Repository layout and upstream
 
@@ -250,3 +263,5 @@ Not in the repository (see `.gitignore`): server data (`archive-live/`, `data/`,
 ## Licence
 
 AGPL-3.0, like the project it is forked from (see [LICENSE](LICENSE)). If you run a changed version for other people, you must offer them its source code.
+
+The sprite sheets of the web page's level drawing come from HerobrineTV's SMM1 Level Downloader (MIT licence, notice in `server/webui/static/sprites/LICENSE-sprites.txt`).

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Super Mario Maker home server</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Super Mario Maker home server</h1>
+  <nav>
+    <button data-tab="levels" class="on">Levels</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <span id="status"></span>
+</header>
+
+<main>
+  <section id="levels">
+    <form id="filter">
+      <input id="q" type="search" placeholder="Name, creator or course ID" autocomplete="off">
+      <label>Sort
+        <select id="sort">
+          <option value="new">Newest</option><option value="old">Oldest</option>
+          <option value="hardest">Hardest first</option><option value="easiest">Easiest first</option>
+          <option value="stars">Most stars</option><option value="attempts">Most played</option>
+        </select>
+      </label>
+      <label>Clear rate <input id="min" type="number" min="0" max="100" placeholder="from %"> <input id="max" type="number" min="0" max="100" placeholder="to %"></label>
+      <button>Search</button>
+    </form>
+    <p id="count" class="note"></p>
+    <div id="grid"></div>
+    <p><button id="more" hidden>Show more</button></p>
+  </section>
+
+  <section id="settings" hidden>
+    <p class="note">These are the lines of <code id="path"></code>. Most settings take effect after the server is restarted
+      (close its window, or press Ctrl+C, and start it again). Anyone who can open this page can change them.</p>
+    <p id="restart" class="warn" hidden>Saved. Restart the server for the highlighted changes to take effect.</p>
+    <p id="settingsError" class="err"></p>
+    <div id="settingsForm"></div>
+  </section>
+</main>
+
+<dialog id="detail">
+  <div class="dhead">
+    <h2 id="dtitle"></h2>
+    <button id="dclose" aria-label="Close">&times;</button>
+  </div>
+  <p id="dmeta" class="note"></p>
+  <div class="tools">
+    <span id="areas"></span>
+    <label>Zoom <select id="zoom"><option value="1">1x</option><option value="1.5" selected>1.5x</option><option value="2">2x</option><option value="3">3x</option></select></label>
+    <label><input type="checkbox" id="grid-on"> Grid</label>
+    <label><input type="checkbox" id="hidden-on"> Hidden blocks</label>
+  </div>
+  <p id="derror" class="err"></p>
+  <div id="view"><canvas id="canvas"></canvas></div>
+  <p class="note">Drawn from the course file with the sprites of HerobrineTV's SMM1 Level Downloader (MIT). Tracks, rotated
+    objects and things inside pipes are not drawn yet.</p>
+</dialog>
+
+<script src="render.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -671,6 +671,11 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_PROXY_PORT=8888
 #PN_SMM_AUTHENTICATION_SERVER_PORT=60000
 #PN_SMM_SECURE_SERVER_PORT=60001
+
+# The web page (levels on this server, and these settings) is at http://localhost:8081. 0 turns it off.
+#SMM_WEB_PORT=8081
+# Who can open the web page. Empty = this PC only. 0.0.0.0 opens it to your whole network, but the page has no password and can change these settings, so only do that on a network you trust.
+#SMM_WEB_HOST=
 `
 
 // loadSettingsFile reads <data>/settings.env (creating a commented template on the first run). Settings that are
@@ -818,6 +823,10 @@ func printBanner() {
 	}
 
 	fmt.Fprintf(&b, "  and  UDP %s, %s\n", os.Getenv("PN_SMM_AUTHENTICATION_SERVER_PORT"), os.Getenv("PN_SMM_SECURE_SERVER_PORT"))
+	if webURL != "" {
+		fmt.Fprintf(&b, "   Web page: %s   (levels on this server, and the settings)\n", webURL)
+	}
+
 	fmt.Fprintf(&b, "   Settings: %s     Stop: Ctrl+C\n", filepath.Join(abs, "settings.env"))
 	b.WriteString("==================================================================================\n\n")
 
