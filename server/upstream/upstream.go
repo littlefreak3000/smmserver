@@ -402,6 +402,11 @@ func (c *Client) RandomLevel(ctx context.Context, n int) (*Level, error) {
 // RandomSpace is the upper bound of the random index the public downloader uses.
 const RandomSpace = 18118278
 
+// RandomLow is where the part of that index that holds levels begins. Measured on 2026-11-24 with about 200 draws: everything
+// below about 7.47 million answers "no level" (50 of 50 draws empty below 7.5 million) and everything above it holds one (more
+// than 100 of 100 valid, up to RandomSpace). The pool draws from RandomLow up, so a draw is no longer lost 4 times in 10.
+const RandomLow = 7500000
+
 // Level fetches one level's metadata by ID; (nil, nil) if the API does not know it.
 func (c *Client) Level(ctx context.Context, id int64) (*Level, error) {
 	body, err := c.get(ctx, &c.apiLimit, fmt.Sprintf("%s/level/%d", c.APIBase, id), 1<<20)

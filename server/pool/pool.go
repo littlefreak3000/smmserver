@@ -211,16 +211,17 @@ func (p *Pool) known(id int64) bool {
 }
 
 func (p *Pool) randIndex() int {
-	space := p.RandomSpace
+	space, low := p.RandomSpace, 0
 	if space <= 0 {
-		space = upstream.RandomSpace
+		// * the real archive: skip the first part of the index, which holds no levels (see upstream.RandomLow)
+		space, low = upstream.RandomSpace, upstream.RandomLow
 	}
 
 	if p.Rand != nil {
-		return p.Rand(space)
+		return low + p.Rand(space-low)
 	}
 
-	return rand.IntN(space)
+	return low + rand.IntN(space-low)
 }
 
 func sleep(ctx context.Context, d time.Duration) error {

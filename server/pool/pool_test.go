@@ -32,6 +32,7 @@ type fake struct {
 	randomErr, levelErr               error
 	randomCalls, levelCalls, binCalls int
 	drawDelay, binDelay               time.Duration // how long a draw or a file download takes (0 = no time at all)
+	indexes                           []int         // every index RandomLevel was asked for
 }
 
 func newFake(t *testing.T) *fake {
@@ -67,6 +68,7 @@ func (f *fake) RandomLevel(ctx context.Context, n int) (*upstream.Level, error) 
 	defer f.mu.Unlock()
 
 	f.randomCalls++
+	f.indexes = append(f.indexes, n)
 
 	if f.randomErr != nil {
 		return nil, f.randomErr
@@ -730,4 +732,54 @@ func TestDrawsAndDownloadsOverlap(t *testing.T) {
 	}
 
 	t.Logf("fill took %v, one at a time would take about %v", elapsed.Round(time.Millisecond), oneAtATime.Round(time.Millisecond))
+}
+
+// * on the real archive the first part of the random index holds no levels and is not drawn from; a pool with its own random
+// * space (tests, small archives) is drawn from as before
+func TestTheRealArchiveIsDrawnFromAboveTheEmptyPartOfItsIndex(t *testing.T) {
+	f := newFake(t)
+	p, _ := setup(t, f)
+	p.TargetPerBand = 1
+	p.MaxDraws = 4
+
+	var bounds []int
+
+	p.Rand = func(n int) int { bounds = append(bounds, n); return 0 }
+
+	p.Fill(context.Background()) //nolint:errcheck // the same level again and again: the budget ends it
+
+	if len(bounds) == 0 || bounds[0] != upstream.RandomSpace-upstream.RandomLow {
+		t.Fatalf("random bound %v, want %d", bounds, upstream.RandomSpace-upstream.RandomLow)
+	}
+
+	f.mu.Lock()
+	first := f.indexes[0]
+	f.mu.Unlock()
+
+	if first != upstream.RandomLow {
+		t.Fatalf("the first draw asked for index %d, want the start of the valid part, %d", first, upstream.RandomLow)
+	}
+
+	// * a pool with its own space is not shifted
+	f2 := newFake(t)
+	p2, _ := setup(t, f2)
+	p2.RandomSpace = 400
+	p2.TargetPerBand = 1
+	p2.MaxDraws = 3
+	p2.Rand = func(n int) int {
+		if n != 400 {
+			t.Errorf("a pool with its own space of 400 was asked for a bound of %d", n)
+		}
+
+		return 0
+	}
+
+	p2.Fill(context.Background()) //nolint:errcheck
+
+	f2.mu.Lock()
+	defer f2.mu.Unlock()
+
+	if len(f2.indexes) == 0 || f2.indexes[0] != 0 {
+		t.Fatalf("a pool with its own space was shifted: %v", f2.indexes)
+	}
 }
