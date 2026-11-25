@@ -212,6 +212,88 @@ func (s *Selector) IDs(q Query) (ids []int64, handled bool, err error) {
 	return nil, false, nil
 }
 
+// weighted is a candidate for a list: the seed's own order (w), and whether and when the player last opened it.
+type weighted struct {
+	id     int64
+	w      uint64
+	played bool
+	at     int64 // when the player last opened it (0 = not in their history)
+}
+
+// topUp returns up to need more levels for a list that came out shorter than asked for: levels the list does not hold yet,
+// the ones the player has not played recently first, then the ones nearest to the requested range (a level inside the range
+// that the confidence rule left out counts as distance 0), then by the seed's own order, so a seeded list stays a function of
+// the seed and the catalog. Levels above a ceiling are never added.
+func (s *Selector) topUp(q Query, have []weighted, history map[int64]int64, norm, ctx string, need int) []weighted {
+	taken := make(map[int64]bool, len(have))
+	for _, l := range have {
+		taken[l.id] = true
+	}
+
+	top := int64(100)
+	if s.ceilingOn() && q.App == s.DifficultyApp {
+		top = int64(s.Ceiling)
+	}
+
+	rows, err := s.DB.Query(`
+		SELECT o.data_id, r.value FROM datastore.objects o
+		JOIN datastore.object_custom_rankings r ON r.data_id = o.data_id AND r.application_id = $1 AND r.value BETWEEN 0 AND $2
+		WHERE o.upload_completed = TRUE AND o.deleted = FALSE AND o.under_review = FALSE AND o.data_type > 2 AND o.data_type < 50`, q.App, top)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	type candidate struct {
+		weighted
+		dist int64
+	}
+
+	var found []candidate
+
+	for rows.Next() {
+		var id, value int64
+		if rows.Scan(&id, &value) != nil || taken[id] || s.skip(id) {
+			continue
+		}
+
+		var dist int64
+
+		switch {
+		case value < q.Min:
+			dist = q.Min - value
+		case value > q.Max:
+			dist = value - q.Max
+		}
+
+		h := sha256.Sum256([]byte(fmt.Sprintf("smm-pick-v%d\x00%s\x00%s\x00%d", index.AlgorithmVersion, norm, ctx, id)))
+		at, played := history[id]
+		found = append(found, candidate{weighted{id, binary.BigEndian.Uint64(h[:8]), played, at}, dist})
+	}
+
+	sort.Slice(found, func(i, j int) bool {
+		a, b := found[i], found[j]
+
+		switch {
+		case a.played != b.played:
+			return !a.played
+		case a.dist != b.dist:
+			return a.dist < b.dist
+		case a.w != b.w:
+			return a.w < b.w
+		}
+
+		return a.id < b.id
+	})
+
+	out := make([]weighted, 0, min(need, len(found)))
+	for i := 0; i < len(found) && i < need; i++ {
+		out = append(out, found[i].weighted)
+	}
+
+	return out
+}
+
 // context is what identifies "the same list": the kind of list and its range, never the offset or length, so a longer
 // request starts with exactly the levels of a shorter one.
 func (q Query) context(lo, hi int64) string {
@@ -344,13 +426,6 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 	}
 	defer rows.Close()
 
-	type weighted struct {
-		id     int64
-		w      uint64
-		played bool
-		at     int64 // when the player last opened it (0 = not in their history)
-	}
-
 	var (
 		all     []weighted
 		history map[int64]int64
@@ -430,6 +505,12 @@ func (s *Selector) catalogSeeded(q Query, seed string, fresh bool) ([]int64, boo
 
 	if fresh && s.NeedMore != nil && unseen < 2*q.Length {
 		s.NeedMore(q.Min, q.Max, unseen)
+	}
+
+	// * A list shorter than asked for makes the game refuse the challenge ("This service is currently unavailable"): Easy asks
+	// * for the clear rates 66-100 %, and a new pool holds few such levels. Top it up with the levels nearest to the range.
+	if want := q.Offset + q.Length; len(all) < want {
+		all = append(all, s.topUp(q, all, history, norm, ctx, want-len(all))...)
 	}
 
 	if q.Offset >= len(all) {
