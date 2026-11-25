@@ -25,6 +25,7 @@ func InitializeObjectByAttachFileParam(ownerPID types.PID, param datastore_smm_t
 	}
 
 	err := database.DB.QueryRow(`INSERT INTO datastore.objects (
+		data_id,
 		owner,
 		size,
 		name,
@@ -43,6 +44,7 @@ func InitializeObjectByAttachFileParam(ownerPID types.PID, param datastore_smm_t
 		creation_date,
 		update_date
 	) VALUES (
+		` + database.NextLocalID() + `,
 		$1,
 		$2,
 		$3,

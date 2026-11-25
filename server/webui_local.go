@@ -102,6 +102,9 @@ func validateSetting(key, value string) error {
 		if n, err := strconv.Atoi(value); err != nil || n < 0 || n > 65535 {
 			return fmt.Errorf("must be a port number (0 to 65535)")
 		}
+	case "SMM_SERVER_ID":
+		_, err := database.ParseServerID(value)
+		return err
 	case "SMM_WEB_HOST":
 		if strings.ContainsAny(value, " /") {
 			return fmt.Errorf("must be an address such as 0.0.0.0")

@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -142,10 +144,65 @@ func Connect(path string) {
 	ensureEventCourseMetaDataFileExists()
 }
 
-// FirstLocalID is the first data ID given to a level a player uploads: 2^32. The course ID the game shows is a checksum and
-// 48 bits of data ID, and every archived level has an ID below 2^32 (the second group of its course ID reads 0000), so the
-// IDs from here up can never collide with an archived level.
+// FirstLocalID is the lowest data ID a level a player uploads can have: 2^32. The course ID the game shows is a checksum and
+// 48 bits of data ID, and every archived level has an ID below 2^32 (the second group of its course ID reads 0000), so IDs
+// from here up can never collide with an archived level.
 const FirstLocalID = 1 << 32
+
+// serverID is the second group of the course ID of the levels uploaded to this server (SMM_SERVER_ID): the upper 16 bits of a
+// 48-bit data ID. Servers with different values hand out different IDs, so levels can be shared between them without a
+// collision. 0000 is the archive's. Until it is set (tests) it is 0001.
+var serverID uint16 = 1
+
+// SetServerID sets the server ID. 0 is refused: that group belongs to the archive.
+func SetServerID(id uint16) error {
+	if id == 0 {
+		return errors.New("the server ID cannot be 0000: that is the archive's")
+	}
+
+	serverID = id
+
+	return nil
+}
+
+// ParseServerID reads a server ID: exactly 4 hex digits, not 0000 (that is the archive's).
+func ParseServerID(s string) (uint16, error) {
+	s = strings.TrimSpace(s)
+
+	if len(s) != 4 {
+		return 0, fmt.Errorf("%q must be exactly 4 hex digits (0001 to FFFF)", s)
+	}
+
+	v, err := strconv.ParseUint(s, 16, 16)
+	if err != nil {
+		return 0, fmt.Errorf("%q must be exactly 4 hex digits (0001 to FFFF)", s)
+	}
+
+	if v == 0 {
+		return 0, errors.New("0000 cannot be used: it is the archive's")
+	}
+
+	return uint16(v), nil
+}
+
+// ServerID returns the server ID (see SetServerID).
+func ServerID() uint16 { return serverID }
+
+// LocalIDRange is the range of data IDs this server gives to uploaded levels: 2^32 of them, from <server ID> * 2^32.
+func LocalIDRange() (lo, hi int64) {
+	lo = int64(serverID) << 32
+
+	return lo, lo + 1<<32 - 1
+}
+
+// NextLocalID is an SQL expression for the next free data ID of this server's range: one above the highest ID in it, or the
+// first of the range. It is evaluated by the INSERT it is part of, which SQLite runs one writer at a time, so two uploads
+// never get the same ID. Changing the server ID moves new uploads to the new range; levels already uploaded keep their IDs.
+func NextLocalID() string {
+	lo, hi := LocalIDRange()
+
+	return fmt.Sprintf(`(SELECT COALESCE(MAX(data_id), %d) + 1 FROM datastore.objects WHERE data_id BETWEEN %d AND %d)`, lo-1, lo, hi)
+}
 
 //go:embed schema.sql
 var schemaSQL string

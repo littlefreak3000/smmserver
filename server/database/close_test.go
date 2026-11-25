@@ -69,3 +69,17 @@ func TestCloseMergesTheWriteAheadLogSoTheFolderCanBeCopied(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestParseServerID(t *testing.T) {
+	for in, want := range map[string]uint16{"0001": 1, "a3f2": 0xA3F2, " A3F2 ": 0xA3F2, "FFFF": 0xFFFF, "0042": 0x42} {
+		if got, err := database.ParseServerID(in); err != nil || got != want {
+			t.Errorf("database.ParseServerID(%q) = %x, %v, want %x", in, got, err, want)
+		}
+	}
+
+	for _, bad := range []string{"", "0000", "1", "123", "12345", "xyz1", "-001", "0x12", "A3 F2"} {
+		if got, err := database.ParseServerID(bad); err == nil {
+			t.Errorf("database.ParseServerID(%q) = %x was accepted", bad, got)
+		}
+	}
+}

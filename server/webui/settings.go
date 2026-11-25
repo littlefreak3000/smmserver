@@ -31,11 +31,11 @@ var kinds = map[string]string{
 }
 
 // exampleOnly are settings whose line in the template shows an example value, not the default.
-var exampleOnly = map[string]bool{"SMM_PUBLIC_HOST": true}
+var exampleOnly = map[string]bool{"SMM_PUBLIC_HOST": true, "SMM_SERVER_ID": true}
 
 var groups = []struct{ Name, Prefix string }{
 	{"Levels and difficulty", "SMM_FETCH SMM_POOL SMM_DIFFICULTY SMM_NARROW SMM_HISTORY SMM_CACHE SMM_INDEX SMM_LIST"},
-	{"Network", "SMM_PUBLIC SMM_ACCOUNT SMM_S3 SMM_PROXY PN_SMM SMM_WEB"},
+	{"Network", "SMM_PUBLIC SMM_ACCOUNT SMM_S3 SMM_PROXY PN_SMM SMM_WEB SMM_SERVER"},
 }
 
 func groupOf(key string) string {

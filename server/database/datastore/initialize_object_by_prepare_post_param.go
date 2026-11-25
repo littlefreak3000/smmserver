@@ -25,6 +25,7 @@ func InitializeObjectByPreparePostParam(ownerPID types.PID, param datastore_type
 
 	now := time.Now().UTC()
 	err := database.DB.QueryRow(`INSERT INTO datastore.objects (
+		data_id,
 		owner,
 		size,
 		name,
@@ -43,6 +44,7 @@ func InitializeObjectByPreparePostParam(ownerPID types.PID, param datastore_type
 		creation_date,
 		update_date
 	) VALUES (
+		` + database.NextLocalID() + `,
 		$1,
 		$2,
 		$3,

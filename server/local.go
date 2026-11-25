@@ -95,6 +95,7 @@ func setupLocalStorage() {
 	publicHost = getenv("SMM_PUBLIC_HOST", lanIPv4())
 
 	ensureSecrets(dataDir)
+	ensureServerID(dataDir)
 	setDefaultEnv("PN_SMM_AUTHENTICATION_SERVER_PORT", "60000")
 	setDefaultEnv("PN_SMM_SECURE_SERVER_HOST", publicHost)
 	setDefaultEnv("PN_SMM_SECURE_SERVER_PORT", "60001")
@@ -205,6 +206,62 @@ func setDefaultEnv(k, v string) {
 
 // ensureSecrets makes the home setup work out of the box: the account service and the NEX server run in the
 // same process, so they only need to agree on two random secrets, which are kept in <data>/secrets.json.
+// ensureServerID decides the server ID, the second group of the course ID of every level uploaded here (see database.ServerID):
+// SMM_SERVER_ID if it is set, else the one kept in <data>/server_id.txt, else a random one that is then kept there, so every
+// server has its own without anyone choosing.
+func ensureServerID(dataDir string) {
+	path := filepath.Join(dataDir, "server_id.txt")
+
+	var (
+		id     uint16
+		source string
+	)
+
+	if raw := strings.TrimSpace(os.Getenv("SMM_SERVER_ID")); raw != "" {
+		if v, err := database.ParseServerID(raw); err != nil {
+			globals.Logger.Warningf("SMM_SERVER_ID: %v; using the stored one instead", err)
+		} else {
+			id, source = v, "SMM_SERVER_ID"
+		}
+	}
+
+	if id == 0 {
+		if b, err := os.ReadFile(path); err == nil {
+			if v, err := database.ParseServerID(string(b)); err != nil {
+				globals.Logger.Warningf("%s: %v; choosing a new server ID", path, err)
+			} else {
+				id, source = v, path
+			}
+		}
+	}
+
+	if id == 0 {
+		var b [2]byte
+
+		for id == 0 {
+			if _, err := rand.Read(b[:]); err != nil {
+				globals.Logger.Criticalf("Cannot choose a server ID: %s", err.Error())
+				os.Exit(1)
+			}
+
+			id = uint16(b[0])<<8 | uint16(b[1])
+		}
+
+		if err := os.WriteFile(path, []byte(fmt.Sprintf("%04X\n", id)), 0o644); err != nil {
+			globals.Logger.Warningf("Cannot write %s: %s (the server ID will be different next time)", path, err.Error())
+		}
+
+		source = "chosen at random and kept in " + path
+	}
+
+	if err := database.SetServerID(id); err != nil {
+		globals.Logger.Criticalf("Server ID: %s", err.Error())
+		os.Exit(1)
+	}
+
+	globals.Logger.Infof("Server ID %04X (%s): levels uploaded to this server get course IDs like XXXX-%04X-XXXX-XXXX; levels of servers with another ID can be shared with this one without a collision", id, source, id)
+}
+
 func ensureSecrets(dataDir string) {
 	if os.Getenv("PN_NEX_TOKEN_AES_KEY") != "" && os.Getenv("PN_NEX_PASSWORD_SECRET") != "" {
 		return
@@ -710,6 +767,12 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_WEB_PORT=8081
 # Who can open the web page. Empty = this PC only. 0.0.0.0 opens it to your whole network, but the page has no password and can change these settings, so only do that on a network you trust.
 #SMM_WEB_HOST=
+
+# The server ID: 4 hex digits (0001 to FFFF) that become the second group of the course ID of every level uploaded to this server
+# (XXXX-<ID>-XXXX-XXXX). Servers with different IDs never give two levels the same ID, so levels can be shared between servers.
+# 0000 is the archive's. It is chosen at random on the first start and kept in data/server_id.txt; set it here to pick your own.
+# Levels already uploaded keep the ID they have; new ones use the new range.
+#SMM_SERVER_ID=A3F2
 `
 
 // loadSettingsFile reads <data>/settings.env (creating a commented template on the first run). Settings that are

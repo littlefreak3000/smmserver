@@ -441,3 +441,72 @@ func TestAnOlderCatalogsCounterIsRaisedToTheLocalRange(t *testing.T) {
 		t.Fatalf("seq %d err %v, want %d", seq, err, id)
 	}
 }
+
+// * every server hands out IDs from its own range (its server ID is the second group of the course ID), so levels of different
+// * servers never share an ID
+func TestUploadsGetIDsFromTheServersOwnRange(t *testing.T) {
+	old := database.ServerID()
+
+	t.Cleanup(func() { database.SetServerID(old) }) //nolint:errcheck
+
+	upload := func() uint64 {
+		t.Helper()
+
+		param := datastore_types.NewDataStorePreparePostParam()
+		param.Size = 10
+		param.Name = "range test"
+		param.DataType = 3
+		param.MetaBinary = types.NewQBuffer([]byte{1})
+
+		id, nexErr := datastore_db.InitializeObjectByPreparePostParam(types.NewPID(42), param)
+		if nexErr != nil {
+			t.Fatal(nexErr.Message)
+		}
+
+		return id
+	}
+
+	if err := database.SetServerID(0); err == nil {
+		t.Fatal("a server ID of 0000 (the archive's) was accepted")
+	}
+
+	if err := database.SetServerID(0xA3F2); err != nil {
+		t.Fatal(err)
+	}
+
+	first := upload()
+	if first != 0xA3F2<<32 {
+		t.Fatalf("first upload %d (%x), want the start of the A3F2 range %x", first, first, uint64(0xA3F2)<<32)
+	}
+
+	if second := upload(); second != first+1 {
+		t.Fatalf("second upload %d, want %d", second, first+1)
+	}
+
+	// * archive imports, whatever their ID, do not touch the range
+	if _, err := database.DB.Exec(`INSERT INTO datastore.objects (data_id, owner) VALUES (61798532, 1)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if third := upload(); third != first+2 {
+		t.Fatalf("third upload %d, want %d", third, first+2)
+	}
+
+	// * another server ID starts its own range, in any order...
+	if err := database.SetServerID(0x0042); err != nil {
+		t.Fatal(err)
+	}
+
+	if other := upload(); other != 0x0042<<32 {
+		t.Fatalf("upload under 0042: %x, want %x", other, uint64(0x0042)<<32)
+	}
+
+	// * ...and going back carries on after the levels already there instead of reusing an ID
+	if err := database.SetServerID(0xA3F2); err != nil {
+		t.Fatal(err)
+	}
+
+	if back := upload(); back != first+3 {
+		t.Fatalf("upload back under A3F2: %d, want %d", back, first+3)
+	}
+}

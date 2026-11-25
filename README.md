@@ -68,6 +68,7 @@ A small always-on machine is a good home for the server: it only has to be on th
 
 | Setting | Meaning | Default |
 |---|---|---|
+| `SMM_SERVER_ID` | The server ID: 4 hex digits (`0001`-`FFFF`) that become the second group of the course ID of every level uploaded here, so different servers never collide. `0000` is the archive's | random, kept in `data/server_id.txt` |
 | `SMM_WEB_PORT` / `SMM_WEB_HOST` | Port of the [web page](#the-web-page-levels-and-settings) (0 = off) and who may open it (empty = this PC only) | 8081 / this PC only |
 | `SMM_PUBLIC_HOST` | Address the console or Cemu uses to reach the server (an IPv4 address; Cemu allows at most 15 characters) | detected |
 | `SMM_FETCH` | `0` runs the server fully offline, with only the levels already downloaded | on |
@@ -112,7 +113,7 @@ The level drawing uses the sprites and the object tables of [HerobrineTV's SMM1 
 
 ## How archived levels work
 
-**Uploaded levels never collide with archived ones.** The course ID the game shows is a checksum plus 12 hex digits of data ID, and every archived level has an ID below 2^32, so the second group of its code reads `0000`. Levels players upload to this server get IDs from 2^32 up (`XXXX-0001-XXXX-XXXX` and higher), which no archived level can have. An older data folder is moved to that range the first time the new version starts; levels uploaded before keep the IDs and codes they have.
+**Uploaded levels never collide with archived ones, or with another server's.** The course ID the game shows is a checksum plus 12 hex digits of data ID, and every archived level has an ID below 2^32, so the second group of its code reads `0000`. Levels players upload to this server get that group from the **server ID** instead: 4 hex digits, `0001` to `FFFF`, set with `SMM_SERVER_ID`. A server with `A3F2` gives its levels codes like `XXXX-A3F2-XXXX-XXXX`, 4 billion of them. The server picks a random ID the first time it starts and keeps it in `data/server_id.txt`, so every server has its own without anyone choosing; set `SMM_SERVER_ID` to pick one yourself (for example so that friends' servers all differ). Servers with different IDs never hand out the same level ID, so levels can be shared between them (there is no export or import for that yet; this is the ID scheme it will need). You can change the ID later: new uploads use the new range and levels uploaded before keep the ID and code they have. An older data folder starts handing out IDs in its range when the new version first starts.
 
 The official servers are gone, but volunteers saved the levels. The server uses two public services, at a low request rate:
 
