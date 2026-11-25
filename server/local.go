@@ -290,7 +290,7 @@ func startHomeAccount() {
 		if _, _, err := svc.LearnPID(name, pid); err != nil {
 			globals.Logger.Warningf("Cannot use the player ID %d that Pretendo reports for %q: %s", pid, name, err.Error())
 		}
-	})
+	}, func(name string) bool { return !svc.HasRealPID(name) })
 
 	url := "http://" + publicHost + ":" + port
 	seedPageURL = url + "/seed"
@@ -322,7 +322,7 @@ func startHomeAccount() {
 // passThrough says whether the Wii U pass-through to the real Pretendo is on: it is, unless SMM_PROXY_PRETENDO=0.
 var passThrough = true
 
-func startConsoleProxy(account http.Handler, learn func(userID string, pid uint32)) {
+func startConsoleProxy(account http.Handler, learn func(userID string, pid uint32), needPID func(userID string) bool) {
 	passThrough = getenv("SMM_PROXY_PRETENDO", "1") != "0"
 
 	port := getenv("SMM_PROXY_PORT", "8888")
@@ -346,6 +346,7 @@ func startConsoleProxy(account http.Handler, learn func(userID string, pid uint3
 		Pretendo: passThrough,
 		// * in pass-through mode the real player ID of each account is read from Pretendo's profile reply
 		LearnProfile: learn,
+		NeedPID:      needPID,
 	})
 	if err != nil {
 		globals.Logger.Warningf("Cannot set up the Wii U proxy: %s", err.Error())

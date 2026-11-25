@@ -285,6 +285,25 @@ func validNNID(n string) bool {
 
 // ---- NNID <-> PID registry ---------------------------------------------------
 
+// derivePID is the player ID made up from a name, in 1,000,000,000..1,999,999,999.
+func derivePID(nnid string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(strings.ToLower(nnid)))
+
+	return 1_000_000_000 + h.Sum32()%1_000_000_000
+}
+
+// HasRealPID says whether the account's stored player ID is one that was learned from Pretendo or adopted from an account
+// file, and not the number made up from the name (the one a real console rejects).
+func (s *Service) HasRealPID(nnid string) bool {
+	var pid uint32
+	if s.cfg.DB.QueryRow(`SELECT pid FROM datastore.accounts WHERE nnid = $1`, nnid).Scan(&pid) != nil {
+		return false
+	}
+
+	return pid != derivePID(nnid)
+}
+
 // PIDFor returns the PID of an NNID, assigning one on first sight. The PID is derived from the NNID
 // (stable even if the registry is lost) in 1,000,000,000..1,999,999,999, bumped on the rare collision.
 func (s *Service) PIDFor(nnid string) (uint32, error) {
@@ -302,9 +321,7 @@ func (s *Service) PIDFor(nnid string) (uint32, error) {
 		return pid, err
 	}
 
-	h := fnv.New32a()
-	h.Write([]byte(strings.ToLower(nnid)))
-	pid := 1_000_000_000 + h.Sum32()%1_000_000_000
+	pid := derivePID(nnid)
 
 	for i := 0; i < 1000; i++ {
 		_, err := s.cfg.DB.Exec(`INSERT INTO datastore.accounts (nnid, pid, created) VALUES ($1, $2, $3)`, nnid, pid, s.cfg.Now().UTC())

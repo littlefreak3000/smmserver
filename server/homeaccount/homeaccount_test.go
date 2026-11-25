@@ -546,3 +546,21 @@ func TestLearnPIDStoresTheRealIDAndReplacesAMadeUpOne(t *testing.T) {
 		}
 	}
 }
+
+func TestHasRealPIDOnlyForLearnedOrAdoptedIDs(t *testing.T) {
+	e := setup(t)
+
+	if e.svc.HasRealPID("Nobody") {
+		t.Fatal("an unknown account has a real player ID")
+	}
+
+	// * an account that got the ID made up from its name does not
+	if _, err := e.svc.PIDFor("MadeUp"); err != nil || e.svc.HasRealPID("MadeUp") {
+		t.Fatalf("a made-up ID counted as real (%v)", err)
+	}
+
+	// * one that learned it does, whatever the case of the name
+	if _, _, err := e.svc.LearnPID("Learned", 1799000999); err != nil || !e.svc.HasRealPID("learned") {
+		t.Fatalf("a learned ID did not count as real (%v)", err)
+	}
+}

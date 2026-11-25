@@ -354,16 +354,31 @@ type fakePretendo struct {
 	proxy   *httptest.Server
 	hosts   []string // addresses the proxy was asked to reach
 	learned []string // "name=pid" for every profile reply the proxy read
+	needPID bool     // what NeedPID answers
 	mu      sync.Mutex
 }
 
 func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) {
 	t.Helper()
 
-	f := &fakePretendo{}
+	f := &fakePretendo{needPID: true}
 
 	// * the "real" account server (TLS) and a TCP echo for tunnelled connections
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// * a login at the game's login: the token, then the profile read with it
+		if r.Header.Get("X-Test-Probe") != "" {
+			switch {
+			case r.Method == http.MethodPost:
+				fmt.Fprint(w, `<?xml version="1.0"?><OAuth20><access_token><token>probe-token</token><refresh_token>r</refresh_token><expires_in>3600</expires_in></access_token></OAuth20>`)
+			case r.Header.Get("Authorization") == "Bearer probe-token":
+				fmt.Fprint(w, `<?xml version="1.0"?><person><pid>1799000123</pid><user_id>SomeUser</user_id></person>`)
+			default:
+				w.WriteHeader(http.StatusBadRequest)
+			}
+
+			return
+		}
+
 		// * a test can ask for a profile reply like the real Pretendo's, or for an error
 		if r.Header.Get("X-Test-Profile") != "" {
 			if code := r.Header.Get("X-Test-Status"); code == "404" {
@@ -409,6 +424,12 @@ func newFakePretendo(t *testing.T, pretendo bool) (*fakePretendo, *http.Client) 
 			f.mu.Lock()
 			f.learned = append(f.learned, fmt.Sprintf("%s=%d", userID, pid))
 			f.mu.Unlock()
+		},
+		NeedPID: func(string) bool {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+
+			return f.needPID
 		},
 		UpstreamDial: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			f.mu.Lock()
@@ -593,5 +614,99 @@ func TestPretendoModeLearnsTheRealPlayerIDFromTheProfileReply(t *testing.T) {
 
 	if len(f.learned) != 1 {
 		t.Fatalf("learned %v after an error reply and a game request, want only the first", f.learned)
+	}
+}
+
+// * the game's login: when the account's real player ID is not known, the proxy asks Pretendo itself before the login is answered
+
+func gameLogin(t *testing.T, c *http.Client, form, extraHeader string) string {
+	t.Helper()
+
+	req, _ := http.NewRequest("POST", "https://account.pretendo.cc/v1/api/oauth20/access_token/generate", strings.NewReader(form))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Nintendo-Title-ID", "000500001018DC00")
+
+	if extraHeader != "" {
+		req.Header.Set(extraHeader, "1")
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
+	return string(b)
+}
+
+func TestTheGamesLoginLearnsThePlayerIDBeforeItIsAnswered(t *testing.T) {
+	f, c := newFakePretendo(t, true)
+
+	// * the login is still answered here, with the body the console sent (the proxy read it and put it back)
+	got := gameLogin(t, c, "grant_type=password&user_id=SomeUser&password_hash=abc", "X-Test-Probe")
+	if got != "account:account.pretendo.cc/v1/api/oauth20/access_token/generate" {
+		t.Fatalf("the login was answered with %q", got)
+	}
+
+	f.mu.Lock()
+	learned, dials := append([]string(nil), f.learned...), len(f.hosts)
+	f.mu.Unlock()
+
+	if len(learned) != 1 || learned[0] != "SomeUser=1799000123" {
+		t.Fatalf("learned %v, want [SomeUser=1799000123]", learned)
+	}
+
+	if dials != 2 {
+		t.Fatalf("%d connections to Pretendo, want 2 (the login and the profile)", dials)
+	}
+}
+
+func TestNoLookupWhenThePlayerIDIsKnownOrTheLoginIsNotAPasswordOne(t *testing.T) {
+	f, c := newFakePretendo(t, true)
+
+	f.mu.Lock()
+	f.needPID = false
+	f.mu.Unlock()
+
+	gameLogin(t, c, "grant_type=password&user_id=SomeUser&password_hash=abc", "X-Test-Probe") // known: nothing to ask
+
+	f.mu.Lock()
+	f.needPID = true
+	f.mu.Unlock()
+
+	gameLogin(t, c, "grant_type=refresh_token&refresh_token=zzz", "X-Test-Probe") // no password in it
+	gameLogin(t, c, "grant_type=password", "X-Test-Probe")                           // no account name
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.hosts) != 0 || len(f.learned) != 0 {
+		t.Fatalf("contacted Pretendo %v and learned %v when nothing was needed", f.hosts, f.learned)
+	}
+}
+
+func TestAFailedLookupDoesNotStopTheLoginAndIsNotRetriedAtOnce(t *testing.T) {
+	f, c := newFakePretendo(t, true)
+
+	// * no X-Test-Probe header: the fake Pretendo answers with something that is not a login reply
+	for i := 0; i < 3; i++ {
+		got := gameLogin(t, c, "grant_type=password&user_id=SomeUser&password_hash=abc", "")
+		if got != "account:account.pretendo.cc/v1/api/oauth20/access_token/generate" {
+			t.Fatalf("login %d was answered with %q", i, got)
+		}
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if len(f.learned) != 0 {
+		t.Fatalf("learned %v from a reply that was not a login", f.learned)
+	}
+
+	if len(f.hosts) != 1 {
+		t.Fatalf("%d connections to Pretendo for three logins, want 1: a failure is not retried for two minutes", len(f.hosts))
 	}
 }

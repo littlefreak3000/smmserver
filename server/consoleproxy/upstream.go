@@ -55,6 +55,16 @@ func (p *Proxy) dial(ctx context.Context, network, addr string) (net.Conn, error
 }
 
 // upstream is the client side of the pass-through: a reverse proxy to the real host.
+// transport is how the real hosts are reached.
+func (p *Proxy) transport() *http.Transport {
+	return &http.Transport{
+		DialContext:         p.dial,
+		TLSClientConfig:     p.cfg.UpstreamTLS,
+		TLSHandshakeTimeout: 10 * time.Second,
+		DisableKeepAlives:   true,
+	}
+}
+
 func (p *Proxy) upstream(scheme, host string) *httputil.ReverseProxy {
 	target := &url.URL{Scheme: scheme, Host: host}
 
@@ -66,12 +76,7 @@ func (p *Proxy) upstream(scheme, host string) *httputil.ReverseProxy {
 			// * the proxy reads some replies, so it asks for them uncompressed (the Go transport then decodes by itself)
 			pr.Out.Header.Del("Accept-Encoding")
 		},
-		Transport: &http.Transport{
-			DialContext:         p.dial,
-			TLSClientConfig:     p.cfg.UpstreamTLS,
-			TLSHandshakeTimeout: 10 * time.Second,
-			DisableKeepAlives:   true,
-		},
+		Transport: p.transport(),
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			p.cfg.Logf("proxy: Pretendo did not answer %s %s%s: %v", r.Method, host, r.URL.RequestURI(), err)
 			p.refuse(w, "upstream did not answer", http.StatusBadGateway)
@@ -94,6 +99,131 @@ func (p *Proxy) forwardAccount(w http.ResponseWriter, r *http.Request, hostport 
 	}
 
 	rp.ServeHTTP(w, r)
+}
+
+// probeAccount makes the login of the game to the real Pretendo itself when the real player ID of its account is not known yet,
+// and reads the profile with the token it gets, so the ID is known before the game's own login is answered. Without it the
+// game's login would be answered with a made-up ID whenever the console's own programs have not logged in first (a game started
+// right after the console), and the console refuses that ID (error 102-2932). Whatever goes wrong here is logged and the login
+// goes on as before; a failure for an account is not retried for two minutes.
+func (p *Proxy) probeAccount(r *http.Request, hostport string) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	r.Body.Close()
+
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	if err != nil {
+		return
+	}
+
+	form, err := url.ParseQuery(string(body))
+	if err != nil || form.Get("grant_type") != "password" || form.Get("user_id") == "" {
+		return
+	}
+
+	user := form.Get("user_id")
+	if !p.cfg.NeedPID(user) || !p.probeAllowed(user) {
+		return
+	}
+
+	host, _, splitErr := net.SplitHostPort(hostport)
+	if splitErr != nil {
+		host = hostport
+	}
+
+	client := &http.Client{Timeout: 8 * time.Second, Transport: p.transport()}
+
+	// * the same headers the console sent (device, title, client credentials), with nothing of ours added
+	request := func(method, path string, body io.Reader) *http.Request {
+		req, _ := http.NewRequest(method, "https://"+host+path, body)
+		req.Host = host
+
+		for k, v := range r.Header {
+			switch strings.ToLower(k) {
+			case "content-length", "content-type", "accept-encoding", "authorization", "connection", "transfer-encoding":
+			default:
+				req.Header[k] = v
+			}
+		}
+
+		req.Header["User-Agent"] = []string{""} // as the console: it sends none, and Go would add its own
+
+		return req
+	}
+
+	fail := func(why string, a ...any) {
+		p.probeFailed(user)
+		p.cfg.Logf("proxy: could not learn the player ID of %q from Pretendo at the game's login: "+why, append([]any{user}, a...)...)
+	}
+
+	login := request(http.MethodPost, r.URL.Path, bytes.NewReader(body))
+	login.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+	resp, err := client.Do(login)
+	if err != nil {
+		fail("%v", err)
+
+		return
+	}
+
+	loginBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+
+	var token struct {
+		Token string `xml:"access_token>token"`
+	}
+
+	if resp.StatusCode != http.StatusOK || xml.Unmarshal(loginBody, &token) != nil || token.Token == "" {
+		fail("the login answered %d", resp.StatusCode)
+
+		return
+	}
+
+	profile := request(http.MethodGet, "/v1/api/people/@me/profile", nil)
+	profile.Header.Set("Authorization", "Bearer "+token.Token)
+
+	resp, err = client.Do(profile)
+	if err != nil {
+		fail("%v", err)
+
+		return
+	}
+
+	profileBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+
+	var person struct {
+		PID    uint64 `xml:"pid"`
+		UserID string `xml:"user_id"`
+	}
+
+	if resp.StatusCode != http.StatusOK || xml.Unmarshal(profileBody, &person) != nil || person.PID == 0 || person.PID > 0xffffffff || person.UserID == "" {
+		fail("the profile answered %d", resp.StatusCode)
+
+		return
+	}
+
+	p.cfg.Logf("proxy: Pretendo says %q has player ID %d (read at the game's login)", person.UserID, person.PID)
+	p.cfg.LearnProfile(person.UserID, uint32(person.PID))
+}
+
+// probeAllowed and probeFailed keep a failing account from being retried at every login.
+func (p *Proxy) probeAllowed(user string) bool {
+	p.probeMu.Lock()
+	defer p.probeMu.Unlock()
+
+	return time.Since(p.probeFailures[strings.ToLower(user)]) > 2*time.Minute
+}
+
+func (p *Proxy) probeFailed(user string) {
+	p.probeMu.Lock()
+	defer p.probeMu.Unlock()
+
+	if p.probeFailures == nil {
+		p.probeFailures = map[string]time.Time{}
+	}
+
+	p.probeFailures[strings.ToLower(user)] = time.Now()
 }
 
 // learnFromProfile reads the account name and player ID out of the real Pretendo's profile reply and tells LearnProfile. The

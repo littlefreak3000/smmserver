@@ -56,6 +56,10 @@ type Config struct {
 	// LearnProfile is told, in pass-through mode, the account name and the real player ID that the real Pretendo reports in the
 	// profile reply of a system title, so the home server can hand out that ID to the game. nil = not interested.
 	LearnProfile func(userID string, pid uint32)
+	// NeedPID says whether the real player ID of an account is still unknown. When the game logs in for such an account, the
+	// proxy makes the same login to the real Pretendo itself and reads the profile, so the ID is known before the game's own
+	// login is answered (the console's own programs may not have logged in yet). nil = never.
+	NeedPID func(userID string) bool
 	// UpstreamDial and UpstreamTLS replace how the real hosts are reached (for tests); nil means the normal network.
 	UpstreamDial func(ctx context.Context, network, addr string) (net.Conn, error)
 	UpstreamTLS  *tls.Config
@@ -66,6 +70,9 @@ type Proxy struct {
 	cfg  Config
 	cert tls.Certificate
 	s3   *httputil.ReverseProxy
+
+	probeMu       sync.Mutex
+	probeFailures map[string]time.Time // account name (lower case) -> when a lookup at the game's login last failed
 }
 
 const connTestBody = `<!DOCTYPE html><html><head><title>HTML Page</title></head><body bgcolor="#FFFFFF">This is test.html page</body></html>`
@@ -382,6 +389,11 @@ func (p *Proxy) route(w http.ResponseWriter, r *http.Request, hostport string) {
 			p.forwardAccount(w, r, hostport)
 
 			return
+		}
+
+		if p.cfg.Pretendo && p.cfg.LearnProfile != nil && p.cfg.NeedPID != nil && r.Method == http.MethodPost &&
+			r.URL.Path == "/v1/api/oauth20/access_token/generate" && pretendoHost(host) {
+			p.probeAccount(r, hostport)
 		}
 
 		p.cfg.Account.ServeHTTP(w, r)
