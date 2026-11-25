@@ -81,6 +81,8 @@ To go back to the real services later (for example to use the eShop), turn the p
 1. Start Super Mario Maker. It should get past the loading screen and reach the main menu.
 2. Open **Course World** or **100 Mario Challenge**. Levels are fetched while you play, as in the Cemu guide; the first lists are short. Levels you open are remembered per player (the last 1,000, `SMM_HISTORY_LEVELS`), so later random lists offer others first.
 
+**On a first start, "This service is currently unavailable" can appear** when you open Course World or start a 100 Mario Challenge. The server begins with an empty level pool and fills it in the background (about 1,000 levels per difficulty band; the first few hundred take several minutes, the whole pool well over an hour). While the pool is nearly empty a list can come back too short for the game, which then shows that message. It is not a fault: press OK, wait a few minutes (the server's log prints `Level pool` progress lines) and try again. Easy and the harder difficulties fill at different speeds, so one difficulty can work before another. The pool is kept in `data/`, so this happens only on the first start.
+
 What to expect is the same as on Cemu: creator names and Miis on every level; flags are a regional guess (the archive does not say where a creator lives); no public online play.
 
 If the game ever stalls on its loading screen, close it and start it again. As a last resort the server can be stopped, the game started, and the server started again once the game is running: the game logs in when it first needs the network.
@@ -111,6 +113,7 @@ Run the server with `SMM_TRACE=1` (in `data/settings.env`, or as an environment 
 | `proxy: TLS handshake with the console failed for <host>` | The console would not accept the certificate: see 102-2160. Hosts ending in `nintendo.net` there mean Inkay's network is off. |
 | `account … 404` for an address you did not expect | The console asked the account service for something not implemented. Send the line; this is how missing pieces are found. |
 | `Account X expected, got Y` in `log/error.log` | The player ID the console sends is not the one the server holds. Run `smm-server account adopt` on the right user's `account.dat`. |
+| "This service is currently unavailable" when opening Course World or a 100 Mario Challenge, on a first start | The level pool is still nearly empty (see section 4). Wait a few minutes and try again. |
 | The game starts but lists are empty | Course World needs the server's data; look for `Level pool` lines in the log, and give it a few minutes after the first start. |
 | Levels start downloading but never play | The console cannot reach the server's address on TCP 9000, or `SMM_PUBLIC_HOST` is wrong. |
 | The Wii U Menu seems signed out of the network | Expected in games-only mode. Do not enter a password. |
