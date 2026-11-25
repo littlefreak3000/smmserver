@@ -146,7 +146,7 @@ const SMMRender = (() => {
       case 20: return [cell(0, 0, 15, 6)];
       case 24: return [cell(0, 0, 13, 2), cell(1, 0, 14, 2)];
       case 25: return [cell(0, 0, 2, 4)];
-      case 27: return [cell(0, 0, 0, 0)];
+      case 27: return []; // the goal: drawn by drawGoal (the sheet's cell 0,0 is an empty placeholder)
       case 28: return [cell(0, 0, 4, 4)];
       case 30: return [cell(0, 0, 8, 2)];
       case 31: return [cell(0, 0, 8, 3), cell(1, 0, 9, 3), cell(-1, 0, 9, 2)];
@@ -187,6 +187,7 @@ const SMMRender = (() => {
 
   // Single sprites for objects the sheet has no cells for (and that are not terrain).
   function formatCandidates(o) {
+    if (!o.block && o.type === 27) return [];
     if (o.block && SHEET_ONLY_BLOCKS.has(o.type)) return [];
     const out = [];
     if (o.type === 3 && o.w > 1) out.push('3-1.png');
@@ -303,6 +304,7 @@ const SMMRender = (() => {
     const order = [...prepared.filter((p) => p.o.type !== 9), ...prepared.filter((p) => p.o.type === 9)];
 
     for (const { o, cells, sprite } of order) {
+      if (!o.block && o.type === 27) { drawGoal(ctx, o, course.themeName, mode, mon, H); continue; }
       const flip = o.transform === 1 || o.childTransform === 1;
       const img = o.block ? block : mon;
 
@@ -327,6 +329,60 @@ const SMMRender = (() => {
         if (o.type === 9 && pipeNo(o) && cells.length) drawPipeLabel(ctx, o, cells, letter(pipeNo(o)), H);
       }
     }
+  }
+
+  // The goal. The sheets hold no flag pole (the game draws it as a model), so the pole and flag are drawn here; castle courses
+  // end at an axe, which is cut out of the monster sheet. The goal object's tile (x, y) is where the sprite stands: centred on
+  // the tile, with its lowest part on the tile's bottom edge.
+  const AXE_REGION = { M1: [208, 126, 32, 50], M3: [208, 126, 32, 50], MW: [208, 126, 32, 50], WU: [208, 133, 31, 45] };
+  const axeCrops = new Map();
+
+  // The smallest box around the opaque pixels of a region of a sheet: [x, y, w, h], or null when it is empty.
+  function opaqueBox(img, r) {
+    const c = document.createElement('canvas');
+    c.width = r[2];
+    c.height = r[3];
+    const x = c.getContext('2d');
+    x.drawImage(img, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+    const d = x.getImageData(0, 0, r[2], r[3]).data;
+    let x0 = r[2], y0 = r[3], x1 = -1, y1 = -1;
+    for (let j = 0; j < r[3]; j++) for (let i = 0; i < r[2]; i++) if (d[(j * r[2] + i) * 4 + 3] > 20) { x0 = Math.min(x0, i); x1 = Math.max(x1, i); y0 = Math.min(y0, j); y1 = Math.max(y1, j); }
+    return x1 < 0 ? null : [r[0] + x0, r[1] + y0, x1 - x0 + 1, y1 - y0 + 1];
+  }
+
+  function drawGoal(ctx, o, theme, mode, mon, H) {
+    // * the goal's own tile is where the old black square was: the lowest part of the pole or axe is the bottom of that tile
+    const cx = o.x * T + T / 2, base = H - o.y * T;
+
+    if (theme === 'castle' && mon && AXE_REGION[mode]) {
+      if (!axeCrops.has(mode)) axeCrops.set(mode, opaqueBox(mon, AXE_REGION[mode]));
+      const b = axeCrops.get(mode);
+      if (b) { ctx.drawImage(mon, b[0], b[1], b[2], b[3], Math.round(cx - b[2] / 2), base - b[3], b[2], b[3]); return; }
+    }
+
+    const top = H - (o.y + 10) * T;
+    ctx.fillStyle = '#e8eef0';
+    ctx.fillRect(cx - 1, top + 3, 3, base - top - 3);
+    ctx.strokeStyle = '#56636a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - 0.5, top + 3.5, 2, base - top - 3);
+    ctx.fillStyle = '#3aa655';
+    ctx.beginPath();
+    ctx.arc(cx + 0.5, top + 2, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(cx - 1, top + 6);
+    ctx.lineTo(cx - 15, top + 12);
+    ctx.lineTo(cx - 1, top + 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#3aa655';
+    ctx.beginPath();
+    ctx.arc(cx - 6, top + 12, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   function blit(ctx, img, sx, sy, dx, dy, dw, dh, flip) {
