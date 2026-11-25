@@ -13,7 +13,7 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/upstream"
 )
 
-func TestSearchByIDAsksTheArchiveForLevelsTheCatalogLacks(t *testing.T) {
+func TestOnlyASearchByOneIDWaitsForTheArchive(t *testing.T) {
 	globals.Logger = plogger.NewLogger()
 
 	db, err := database.Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
@@ -42,24 +42,32 @@ func TestSearchByIDAsksTheArchiveForLevelsTheCatalogLacks(t *testing.T) {
 
 	database.OnMissing = func(id uint64) bool { asked = append(asked, id); return false }
 
+	// * a request naming several IDs (the rankings of a list, levels the game remembers) never waits for a download
 	bringIntoCatalog(types.List[types.UInt64]{7000, 11, 12, 13, 14, 15})
+	bringIntoCatalog(types.List[types.UInt64]{11, 12})
 
-	// * the held level is not asked for, and no more than three lookups happen for one request
-	if len(asked) != 3 || asked[0] != 11 || asked[1] != 12 || asked[2] != 13 {
-		t.Fatalf("asked the archive for %v, want [11 12 13]", asked)
+	if len(asked) != 0 {
+		t.Fatalf("a request with several IDs asked the archive for %v", asked)
 	}
 
 	// * a single missing ID, as in a search by course ID, is asked for
-	asked = nil
-
 	bringIntoCatalog(types.List[types.UInt64]{572666675})
 
 	if len(asked) != 1 || asked[0] != 572666675 {
 		t.Fatalf("asked %v for a search by ID, want [572666675]", asked)
 	}
 
+	// * a single ID the catalog holds is not asked for
+	asked = nil
+
+	bringIntoCatalog(types.List[types.UInt64]{7000})
+
+	if len(asked) != 0 {
+		t.Fatalf("asked %v for a level the catalog holds", asked)
+	}
+
 	// * with on-demand fetching off nothing happens, and nothing panics
 	database.OnMissing = nil
 
-	bringIntoCatalog(types.List[types.UInt64]{1, 2, 3})
+	bringIntoCatalog(types.List[types.UInt64]{1})
 }

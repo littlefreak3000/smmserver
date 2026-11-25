@@ -11,34 +11,24 @@ import (
 	"github.com/PretendoNetwork/super-mario-maker/globals"
 )
 
-// maxOnDemandPerSearch is how many levels one by-ID request may fetch from the archive before it answers with what it has.
-const maxOnDemandPerSearch = 3
-
-// bringIntoCatalog gives on-demand fetching (when it is enabled) a chance to fetch the levels that a by-ID request names and the
+// bringIntoCatalog gives on-demand fetching (when it is enabled) a chance to fetch the level that a by-ID request names and the
 // catalog does not hold, so searching for the course ID of an archived level that has not been downloaded yet finds it. This
-// request omits what it cannot find, so without this the game would just say the course does not exist. At most
-// maxOnDemandPerSearch levels are fetched per request, so a long list cannot stall the game.
+// request omits what it cannot find, so without this the game would just say the course does not exist.
+//
+// Only a request for exactly one ID waits for a download: that is a search by course ID. The game also sends this request with
+// many IDs (the rankings of a list, or levels it remembers from earlier play); waiting for several downloads there made the
+// answer take seconds, and starting a 100 Mario Challenge on a new install failed with "service unavailable".
 func bringIntoCatalog(ids types.List[types.UInt64]) {
-	if database.OnMissing == nil || database.DB == nil {
+	if len(ids) != 1 || database.OnMissing == nil || database.DB == nil {
 		return
 	}
 
-	attempts := 0
-
-	for _, id := range ids {
-		var one int
-		if database.DB.QueryRow(`SELECT 1 FROM datastore.objects WHERE data_id = $1`, id).Scan(&one) == nil {
-			continue
-		}
-
-		if attempts >= maxOnDemandPerSearch {
-			return
-		}
-
-		attempts++
-
-		database.OnMissing(uint64(id))
+	var one int
+	if database.DB.QueryRow(`SELECT 1 FROM datastore.objects WHERE data_id = $1`, ids[0]).Scan(&one) == nil {
+		return
 	}
+
+	database.OnMissing(uint64(ids[0]))
 }
 
 func GetCustomRankingByDataID(err error, packet nex.PacketInterface, callID uint32, param datastore_super_mario_maker_types.DataStoreGetCustomRankingByDataIDParam) (*nex.RMCMessage, *nex.Error) {
