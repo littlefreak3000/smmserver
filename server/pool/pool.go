@@ -49,43 +49,54 @@ var DefaultBands = []Band{
 	{"50-100%", 0.50, 1.0000001},
 }
 
-// ParseBands reads band edges in percent, for example "5,20,50", into the bands 0-5%, 5-20%, 20-50% and 50-100%. Each number
-// is the top of a band and the bottom of the next one, so the numbers must rise and lie between 1 and 99, and there can be at
-// most 8 of them (9 bands). The pool keeps the same number of levels in every band.
+// ParseBands reads the top of each band, in percent clear rate, for example "10,30,60,85" for the bands 0-10%, 10-30%, 30-60%
+// and 60-85%. The numbers rise and lie between 1 and 100; the last one is the top of the highest band, so a last number below
+// 100 also keeps levels that are easier than that out of the pool (the same as SMM_DIFFICULTY_CEILING). A list of three
+// numbers or fewer that does not end in 100 gets the top band up to 100 added ("5,20,50" is 0-5%, 5-20%, 20-50%, 50-100%).
+// At most 9 bands. The pool keeps the same number of levels in every band.
 func ParseBands(s string) ([]Band, error) {
 	if strings.TrimSpace(s) == "" {
 		return nil, errors.New("no band edges given")
 	}
 
-	var edges []int
+	var tops []int
 
 	for _, part := range strings.Split(s, ",") {
 		n, err := strconv.Atoi(strings.TrimSpace(part))
-		if err != nil || n < 1 || n > 99 {
-			return nil, fmt.Errorf("%q is not a whole number from 1 to 99", strings.TrimSpace(part))
+		if err != nil || n < 1 || n > 100 {
+			return nil, fmt.Errorf("%q is not a whole number from 1 to 100", strings.TrimSpace(part))
 		}
 
-		if len(edges) > 0 && n <= edges[len(edges)-1] {
-			return nil, fmt.Errorf("the edges must rise, but %d follows %d", n, edges[len(edges)-1])
+		if len(tops) > 0 && n <= tops[len(tops)-1] {
+			return nil, fmt.Errorf("the numbers must rise, but %d follows %d", n, tops[len(tops)-1])
 		}
 
-		edges = append(edges, n)
+		tops = append(tops, n)
 	}
 
-	if len(edges) > 8 {
-		return nil, errors.New("at most 8 edges (9 bands) are allowed")
+	if len(tops) <= 3 && tops[len(tops)-1] < 100 {
+		tops = append(tops, 100)
 	}
 
-	bands := make([]Band, 0, len(edges)+1)
+	if len(tops) > 9 {
+		return nil, errors.New("at most 9 bands are allowed")
+	}
+
+	bands := make([]Band, 0, len(tops))
 	lo := 0
 
-	for _, e := range edges {
-		bands = append(bands, Band{fmt.Sprintf("%d-%d%%", lo, e), float64(lo) / 100, float64(e) / 100})
-		lo = e
+	for i, t := range tops {
+		max := float64(t) / 100
+		if i == len(tops)-1 {
+			// * the top band includes its last number: Max is a little above it so a score of exactly that belongs to it
+			max += 0.0000001
+		}
+
+		bands = append(bands, Band{fmt.Sprintf("%d-%d%%", lo, t), float64(lo) / 100, max})
+		lo = t
 	}
 
-	// * the top band reaches 100%: Max is a little above 1 so a score of exactly 1 belongs to it
-	return append(bands, Band{fmt.Sprintf("%d-100%%", lo), float64(lo) / 100, 1.0000001}), nil
+	return bands, nil
 }
 
 // ChallengeRanges turns the bands into what the four difficulty buttons of the game ask for, as clear-rate ranges in percent
@@ -105,10 +116,13 @@ func ChallengeRanges(bands []Band) ([4][2]int64, error) {
 		first, last := k*n/4, (k+1)*n/4-1
 
 		lo := int64(math.Round(bands[first].Min * 100))
-		hi := int64(math.Round(bands[last].Max*100)) - 1 // * a band ends where the next one starts: the edge belongs to the upper band
+		edge := bands[last].Max * 100
+		hi := int64(math.Round(edge))
 
-		if bands[last].Max > 1 {
-			hi = 100
+		// * a band ends where the next one starts, so the edge belongs to the upper band; only the top band includes its edge
+		// * (its Max is a little above a whole number)
+		if edge-float64(hi) < 0.000001 {
+			hi--
 		}
 
 		out[k] = [2]int64{lo, hi}

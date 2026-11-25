@@ -609,7 +609,16 @@ func TestParseBands(t *testing.T) {
 		t.Fatalf("a single edge gives two bands: %v %v", one, err)
 	}
 
-	for _, bad := range []string{"", "  ", "x", "5,5", "20,5", "0,10", "10,100", "5,,20", "-3", "1,2,3,4,5,6,7,8,9"} {
+	// * the last number is the top of the top band: below 100 it is a ceiling
+	if four, err := pool.ParseBands("10,30,60,85"); err != nil || len(four) != 4 || four[3].Min != 0.6 || four[3].Max < 0.85 || four[3].Max > 0.8501 {
+		t.Fatalf("10,30,60,85 gives four bands, the last 60-85: %v %v", four, err)
+	}
+
+	if full, err := pool.ParseBands("10,30,60,100"); err != nil || len(full) != 4 || full[3].Max < 1 {
+		t.Fatalf("10,30,60,100 gives four bands to 100: %v %v", full, err)
+	}
+
+	for _, bad := range []string{"", "  ", "x", "5,5", "20,5", "0,10", "101", "5,,20", "-3", "1,2,3,4,5,6,7,8,9,10"} {
 		if b, err := pool.ParseBands(bad); err == nil {
 			t.Fatalf("%q was accepted: %v", bad, b)
 		}
@@ -791,14 +800,19 @@ func TestChallengeRangesFollowTheBands(t *testing.T) {
 		t.Fatalf("default bands: %v, %v", got, err)
 	}
 
+	// * the last number is the top of Easy
+	if got, err := pool.ChallengeRanges(mustBands(t, "10,30,60,85")); err != nil || got != [4][2]int64{{0, 9}, {10, 29}, {30, 59}, {60, 85}} {
+		t.Fatalf("10,30,60,85: %v, %v", got, err)
+	}
+
 	// * more bands are shared out evenly, lowest bands to Super Expert, highest to Easy
-	six, _ := pool.ParseBands("10,20,30,40,50")
+	six, _ := pool.ParseBands("10,20,30,40,50,100")
 	if got, _ := pool.ChallengeRanges(six); got != [4][2]int64{{0, 9}, {10, 29}, {30, 39}, {40, 100}} {
 		t.Fatalf("six bands: %v", got)
 	}
 
 	// * every range starts where the one below ends
-	for _, s := range []string{"5,20,50", "10,30,60,85", "10,20,30,40,50,60,70,80", "1,2,3"} {
+	for _, s := range []string{"5,20,50", "10,30,60,100", "10,20,30,40,50,60,70,80,100", "1,2,3"} {
 		bands, _ := pool.ParseBands(s)
 
 		r, err := pool.ChallengeRanges(bands)
@@ -824,4 +838,15 @@ func TestChallengeRangesFollowTheBands(t *testing.T) {
 			t.Errorf("%s: accepted", s)
 		}
 	}
+}
+
+func mustBands(t *testing.T, s string) []pool.Band {
+	t.Helper()
+
+	b, err := pool.ParseBands(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return b
 }

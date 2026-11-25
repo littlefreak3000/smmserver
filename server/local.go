@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -572,6 +573,19 @@ var (
 	ceilingPct  = 100
 )
 
+// bandsCeiling is the top of the highest band of SMM_POOL_BANDS in percent: 100 unless the list ends below it ("10,30,60,85"),
+// which keeps easier levels out like SMM_DIFFICULTY_CEILING does.
+func bandsCeiling() int {
+	bands := poolBands()
+	top := bands[len(bands)-1].Max * 100
+
+	if top > 100 {
+		return 100
+	}
+
+	return int(math.Round(top))
+}
+
 var (
 	bandsOnce sync.Once
 	bandsVal  []pool.Band
@@ -620,7 +634,7 @@ func difficultyCeiling() int {
 		}
 	})
 
-	return ceilingPct
+	return min(ceilingPct, bandsCeiling())
 }
 
 func hostOf(raw string) string {
@@ -650,11 +664,12 @@ const settingsTemplate = `# Settings for the Super Mario Maker home server. Remo
 #SMM_POOL_GROW_EVERY=10m
 #SMM_POOL_GROW_BY=1
 #SMM_POOL_MAX=1000
-# Where the difficulty bands end, in percent clear rate. The pool keeps the same number of levels in every band, and the four
-# difficulty buttons of the game (Super Expert, Expert, Normal, Easy, lowest clear rate first) ask for exactly these bands:
-# 5,20,50 means 0-5%, 5-20%, 20-50% and 50-100% (the default). Rising whole numbers from 1 to 99, at least 3 (4 bands, one per
-# button) and at most 8; with more than 4 bands the buttons share them (6 bands: Expert and Easy get two each). Does not change
-# cache builds.
+# The difficulty bands: the top of each band, in percent clear rate, lowest first. The pool keeps the same number of levels in
+# every band, and the four difficulty buttons of the game (Super Expert, Expert, Normal, Easy) ask for exactly these bands.
+# 10,30,60,85 means Super Expert 0-10%, Expert 10-30%, Normal 30-60%, Easy 60-85%: the last number is the top of Easy, and when it
+# is below 100 levels easier than that are kept out (like SMM_DIFFICULTY_CEILING). 5,20,50 (the default) is short for
+# 5,20,50,100. Rising whole numbers from 1 to 100; at least 4 bands (one per button), at most 9; with more than 4 the buttons
+# share them (6 bands: Expert and Easy get two each). Does not change cache builds.
 #SMM_POOL_BANDS=5,20,50
 # Highest clear rate (percent) a level may have to be kept and offered in difficulty lists. 100 = no ceiling. Set it lower, for
 # example 80, to filter out levels that are too easy: the pool stops downloading them and the difficulty lists skip any it holds.
