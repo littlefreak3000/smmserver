@@ -29,6 +29,7 @@ var static embed.FS
 type Config struct {
 	DB              *sql.DB
 	CoursesDir      string
+	UploadsDir      string // where levels players upload are kept (tried after CoursesDir)
 	SettingsPath    string
 	Template        string                        // the commented settings template
 	ValidateSetting func(key, value string) error // optional: judgement only the server can make
@@ -317,7 +318,13 @@ func parseID(text string) (int64, bool) {
 
 // chunks reads and splits a course file.
 func (s *server) chunks(id int64) (*levelimport.Chunks, error) {
-	b, err := os.ReadFile(filepath.Join(s.cfg.CoursesDir, strconv.FormatInt(id, 10)+".bin"))
+	name := strconv.FormatInt(id, 10) + ".bin"
+
+	b, err := os.ReadFile(filepath.Join(s.cfg.CoursesDir, name))
+	if errors.Is(err, os.ErrNotExist) && s.cfg.UploadsDir != "" {
+		b, err = os.ReadFile(filepath.Join(s.cfg.UploadsDir, name))
+	}
+
 	if err != nil {
 		return nil, err
 	}

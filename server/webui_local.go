@@ -39,6 +39,7 @@ func startWebUI() {
 	handler := webui.New(webui.Config{
 		DB:              database.DB,
 		CoursesDir:      coursesDirPath,
+		UploadsDir:      filepath.Join(dataDirPath, "uploads"),
 		SettingsPath:    filepath.Join(dataDirPath, "settings.env"),
 		Template:        settingsTemplate,
 		ValidateSetting: validateSetting,
