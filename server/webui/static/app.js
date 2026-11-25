@@ -106,7 +106,13 @@
     if (!current || !current.areas[area]) { $('#derror').textContent = 'The course file could not be read.'; return; }
     for (const b of $('#areas').children) b.classList.toggle('on', b.dataset.a === area);
     const c = $('#canvas');
-    await SMMRender.draw(c, current.areas[area], { grid: $('#grid-on').checked, hidden: $('#hidden-on').checked });
+    const links = SMMRender.pipeLinks(current.areas);
+    await SMMRender.draw(c, current.areas[area], { grid: $('#grid-on').checked, hidden: $('#hidden-on').checked, pipes: $('#pipes-on').checked, area, links });
+    const name = { main: 'main area', sub: 'subworld' };
+    $('#plinks').innerHTML = links.length
+      ? '<b>Pipe links:</b> ' + links.map((l) => `#${l.no} ` + l.ends.map((e) => `${name[e.area] || e.area} (${e.x}, ${e.y})`).join(' ↔ ')
+          + (l.ends.length === 1 ? ' (no other end)' : '')).join(' &nbsp;·&nbsp; ')
+      : '';
     zoom();
     // * the start of a course is at the bottom left
     $('#view').scrollTop = $('#view').scrollHeight;
@@ -120,7 +126,7 @@
   }
 
   $('#zoom').onchange = zoom;
-  $('#grid-on').onchange = $('#hidden-on').onchange = render;
+  $('#grid-on').onchange = $('#hidden-on').onchange = $('#pipes-on').onchange = render;
   $('#dclose').onclick = () => $('#detail').close();
   $('#detail').addEventListener('click', (e) => { if (e.target === $('#detail')) $('#detail').close(); });
 
