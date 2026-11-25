@@ -224,7 +224,8 @@ const SMMRender = (() => {
   // Pipes that belong together carry the same number (bits 20-23 of the object flags; 0 = not connected). The two ends can sit
   // in the same area or one in the main area and one in the subworld.
   const pipeNo = (o) => (o.flags >>> 20) & 0xF;
-  const AREA = { main: 'Main', sub: 'Sub' };
+  // Pair 1 is A, 2 is B, and so on: the pipe marked A in one area leads to the pipe marked A in the other (or the same) area.
+  const letter = (no) => String.fromCharCode(64 + no);
   const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#d81b60', '#6d4c41', '#3949ab', '#7cb342', '#f4511e', '#00897b', '#5e35b1', '#c0ca33', '#546e7a'];
 
   /** Groups the pipes of all areas by number: [{no, ends: [{area, x, y}]}], sorted by number. */
@@ -239,15 +240,6 @@ const SMMRender = (() => {
       }
     }
     return [...by].sort((a, b) => a[0] - b[0]).map(([no, ends]) => ({ no, ends }));
-  }
-
-  // The label of one pipe: its number and where the other end is.
-  function pipeLabel(no, area, links) {
-    const link = links.find((l) => l.no === no);
-    const here = link ? link.ends.filter((e) => e.area === area).length : 1;
-    const other = link ? link.ends.filter((e) => e.area !== area) : [];
-    if (other.length) return `${no}→${AREA[other[0].area] || other[0].area}`;
-    return link && link.ends.length === 2 && here === 2 ? `${no}↔` : `${no}?`;
   }
 
   function drawPipeLabel(ctx, o, cells, text, H) {
@@ -274,7 +266,7 @@ const SMMRender = (() => {
 
   /**
    * Draws `course` into `canvas` at 16 px per tile (scale it with CSS). options: {hidden: show clear blocks, grid: draw a grid,
-   * pipes: label the pipes (needs area: this area's name and links: pipeLinks of all areas)}.
+   * pipes: letter the pipes (needs links: pipeLinks of all areas)}.
    * Resolves when drawn.
    */
   async function draw(canvas, course, options = {}) {
@@ -332,7 +324,7 @@ const SMMRender = (() => {
 
     if (options.pipes && options.links) {
       for (const { o, cells } of prepared) {
-        if (o.type === 9 && pipeNo(o) && cells.length) drawPipeLabel(ctx, o, cells, pipeLabel(pipeNo(o), options.area, options.links), H);
+        if (o.type === 9 && pipeNo(o) && cells.length) drawPipeLabel(ctx, o, cells, letter(pipeNo(o)), H);
       }
     }
   }
@@ -378,5 +370,5 @@ const SMMRender = (() => {
     ctx.fillText(String(o.type), x + 2, y + 10);
   }
 
-  return { draw, pipeLinks };
+  return { draw, pipeLinks, letter };
 })();

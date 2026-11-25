@@ -110,7 +110,7 @@
     await SMMRender.draw(c, current.areas[area], { grid: $('#grid-on').checked, hidden: $('#hidden-on').checked, pipes: $('#pipes-on').checked, area, links });
     const name = { main: 'main area', sub: 'subworld' };
     $('#plinks').innerHTML = links.length
-      ? '<b>Pipe links:</b> ' + links.map((l) => `#${l.no} ` + l.ends.map((e) => `${name[e.area] || e.area} (${e.x}, ${e.y})`).join(' ↔ ')
+      ? '<b>Pipe links:</b> ' + links.map((l) => `<b>${SMMRender.letter(l.no)}</b> ` + l.ends.map((e) => `${name[e.area] || e.area} (${e.x}, ${e.y})`).join(' ↔ ')
           + (l.ends.length === 1 ? ' (no other end)' : '')).join(' &nbsp;·&nbsp; ')
       : '';
     zoom();
